@@ -1,0 +1,26 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# SQLite runtime databases (optional to ignore or track initial sample)
+# campus_optimizer.db
+
+# OS specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Streamlit runtime
+.streamlit/secrets.toml
