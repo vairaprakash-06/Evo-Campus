@@ -77,6 +77,11 @@ def inject_global_data():
 # Page Navigation Routes
 # ---------------------------------------------------------------------------
 
+@app.route("/api/debug")
+def debug_environ():
+    safe_env = {k: str(v) for k, v in request.environ.items() if isinstance(v, (str, int, float, bool))}
+    return jsonify(safe_env)
+
 @app.route("/")
 @app.route("/dashboard")
 @app.route("/api/index")
