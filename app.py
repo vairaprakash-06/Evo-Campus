@@ -38,6 +38,22 @@ try:
 except Exception as e:
     app.logger.warning(f"Initial DB setup notice: {e}")
 
+class VercelPathFixMiddleware:
+    """WSGI middleware to restore original PATH_INFO in Vercel serverless environment."""
+    def __init__(self, wsgi_app):
+        self.wsgi_app = wsgi_app
+
+    def __call__(self, environ, start_response):
+        matched = environ.get("HTTP_X_MATCHED_PATH")
+        if matched:
+            environ["PATH_INFO"] = matched
+        elif environ.get("PATH_INFO") in ("/api/index", "/api/index.py"):
+            environ["PATH_INFO"] = "/"
+        return self.wsgi_app(environ, start_response)
+
+app.wsgi_app = VercelPathFixMiddleware(app.wsgi_app)
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +79,7 @@ def inject_global_data():
 
 @app.route("/")
 @app.route("/dashboard")
+@app.route("/api/index")
 def dashboard():
     """Home Dashboard displaying KPI metrics, utilization stats, and Chart.js data."""
     stats = db.get_dashboard_stats()
