@@ -10,7 +10,6 @@ campus resource scheduling problem (classrooms, labs, seminar halls, equipment, 
 import time
 import random
 from typing import List, Dict, Any, Tuple, Optional
-import numpy as np
 
 # Priority weighting map: exponential scaling for critical academic events
 PRIORITY_WEIGHTS = {
@@ -78,7 +77,12 @@ class GeneticAlgorithmOptimizer:
 
         if self.random_seed is not None:
             random.seed(self.random_seed)
-            np.random.seed(self.random_seed)
+            try:
+                import numpy as _np
+                _np.random.seed(self.random_seed)
+            except (ImportError, Exception):
+                pass
+
 
         # Lookup maps for rapid gene evaluation
         self.resource_by_id = {r["id"]: r for r in self.resources}
@@ -492,7 +496,7 @@ class GeneticAlgorithmOptimizer:
             fitnesses = [res[0] for res in eval_results]
 
             # Track generation best
-            current_max_idx = int(np.argmax(fitnesses))
+            current_max_idx = max(range(len(fitnesses)), key=lambda idx: fitnesses[idx])
             current_best_fit = fitnesses[current_max_idx]
 
             if current_best_fit > best_fitness:
@@ -500,8 +504,8 @@ class GeneticAlgorithmOptimizer:
                 best_chromosome = list(population[current_max_idx])
                 best_stats = eval_results[current_max_idx][1]
 
-            mean_fit = float(np.mean(fitnesses))
-            min_fit = float(np.min(fitnesses))
+            mean_fit = sum(fitnesses) / len(fitnesses) if fitnesses else 0.0
+            min_fit = min(fitnesses) if fitnesses else 0.0
 
             convergence_history.append({
                 "generation": gen,
@@ -517,7 +521,7 @@ class GeneticAlgorithmOptimizer:
                 pass
 
             # Step 3: Elitism - retain top k individuals
-            sorted_indices = np.argsort(fitnesses)[::-1]
+            sorted_indices = sorted(range(len(fitnesses)), key=lambda idx: fitnesses[idx], reverse=True)
             next_population = [list(population[idx]) for idx in sorted_indices[:self.elitism_count]]
 
             # Step 4: Reproduction (Selection, Crossover, Mutation, Repair)

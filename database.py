@@ -7,19 +7,48 @@ Provides SQLite database operations, schema creation, sample data seeding,
 and transactional CRUD functions for resources, activities, and optimization runs.
 """
 
+import os
+import sys
+import tempfile
 import sqlite3
 import json
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from contextlib import contextmanager
 
-DEFAULT_DB_PATH = "campus_optimizer.db"
+def get_default_db_path() -> str:
+    """
+    Returns the appropriate path for the SQLite database.
+    In serverless environments (e.g. Vercel, AWS Lambda), the deployment directory
+    is read-only, so the writable /tmp directory is used.
+    """
+    if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        return os.path.join(tempfile.gettempdir(), "campus_optimizer.db")
+
+    if "DB_PATH" in os.environ:
+        return os.environ["DB_PATH"]
+
+    # Test if current working directory is writable
+    try:
+        test_file = os.path.abspath(".perm_test.tmp")
+        with open(test_file, "w") as f:
+            f.write("1")
+        os.remove(test_file)
+        return "campus_optimizer.db"
+    except (OSError, IOError, PermissionError):
+        return os.path.join(tempfile.gettempdir(), "campus_optimizer.db")
+
+DEFAULT_DB_PATH = get_default_db_path()
 
 
 @contextmanager
-def get_connection(db_path: str = DEFAULT_DB_PATH):
+def get_connection(db_path: Optional[str] = None):
     """Context manager for SQLite database connection with row factory and foreign keys enabled."""
-    conn = sqlite3.connect(db_path)
+    target_path = db_path if db_path is not None else get_default_db_path()
+    db_dir = os.path.dirname(os.path.abspath(target_path))
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+    conn = sqlite3.connect(target_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     try:
@@ -28,9 +57,10 @@ def get_connection(db_path: str = DEFAULT_DB_PATH):
         conn.close()
 
 
-def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
+def init_db(db_path: Optional[str] = None) -> None:
     """Initializes all necessary SQLite tables if they do not exist."""
-    with get_connection(db_path) as conn:
+    target_path = db_path if db_path is not None else get_default_db_path()
+    with get_connection(target_path) as conn:
         cursor = conn.cursor()
 
         # Table 1: Campus Resources
@@ -594,8 +624,7 @@ def delete_optimization_run(run_id: int, db_path: str = DEFAULT_DB_PATH) -> Tupl
         return False, f"Could not delete run: {str(e)}"
 
 
-def get_dashboard_stats(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
-    """Calculates summary KPIs and statistics across resources, activities, and runs."""
+def _fetch_dashboard_stats(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
 
@@ -648,3 +677,15 @@ def get_dashboard_stats(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
             "resource_breakdown": resource_breakdown,
             "priority_breakdown": priority_breakdown
         }
+
+
+def get_dashboard_stats(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
+    """Calculates summary KPIs and statistics across resources, activities, and runs."""
+    try:
+        return _fetch_dashboard_stats(db_path)
+    except sqlite3.OperationalError as e:
+        if "no such table" in str(e).lower():
+            init_db(db_path)
+            return _fetch_dashboard_stats(db_path)
+        raise
+
