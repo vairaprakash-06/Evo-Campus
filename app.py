@@ -38,15 +38,23 @@ try:
 except Exception as e:
     app.logger.warning(f"Initial DB setup notice: {e}")
 
+import urllib.parse
+
 class VercelPathFixMiddleware:
     """WSGI middleware to restore original PATH_INFO in Vercel serverless environment."""
     def __init__(self, wsgi_app):
         self.wsgi_app = wsgi_app
 
     def __call__(self, environ, start_response):
-        matched = environ.get("HTTP_X_MATCHED_PATH")
-        if matched:
-            environ["PATH_INFO"] = matched
+        qs = environ.get("QUERY_STRING", "")
+        if "__path__=" in qs:
+            params = urllib.parse.parse_qs(qs)
+            injected_path = params.get("__path__", [""])[0]
+            if injected_path:
+                clean_path = "/" + injected_path.lstrip("/")
+                environ["PATH_INFO"] = clean_path
+                filtered = [p for p in qs.split("&") if not p.startswith("__path__=")]
+                environ["QUERY_STRING"] = "&".join(filtered)
         elif environ.get("PATH_INFO") in ("/api/index", "/api/index.py"):
             environ["PATH_INFO"] = "/"
         return self.wsgi_app(environ, start_response)
