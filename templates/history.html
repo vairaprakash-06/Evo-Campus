@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Optimization History{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+  <div class="glass-card-header">
+    <div>
+      <div class="glass-card-title">
+        <span>📜 Optimization History & Audit Ledger</span>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 4px;">
+        Permanent SQLite audit record of historical Genetic Algorithm optimization executions and telemetry.
+      </p>
+    </div>
+    <a href="{{ url_for('optimize_page') }}" class="btn btn-primary">
+      🧬 New Optimization Run
+    </a>
+  </div>
+
+  <div class="table-responsive">
+    <table class="custom-table">
+      <thead>
+        <tr>
+          <th>Run ID</th>
+          <th>Execution Timestamp</th>
+          <th>Parameters</th>
+          <th>Best Fitness</th>
+          <th>Allocated</th>
+          <th>Utilization</th>
+          <th>Operating Cost</th>
+          <th>Runtime</th>
+          <th>Status</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in runs %}
+        <tr>
+          <td><strong>#{{ r.id }}</strong></td>
+          <td style="font-size: 0.82rem; font-family: var(--font-mono); color: var(--text-dim);">
+            {{ r.timestamp }}
+          </td>
+          <td>
+            <span class="badge badge-info">P: {{ r.population_size }}</span>
+            <span class="badge badge-info">G: {{ r.generations }}</span>
+            <span class="badge badge-secondary" title="Mutation Rate">M: {{ r.mutation_rate }}</span>
+          </td>
+          <td style="font-weight: 700; color: #60A5FA;">
+            {{ r.best_fitness }}
+          </td>
+          <td>
+            <strong style="color: #34D399;">{{ r.allocated_activities }}</strong> / {{ r.total_activities }}
+          </td>
+          <td>
+            <strong>{{ r.resource_utilization_pct }}%</strong>
+          </td>
+          <td>${{ r.total_cost }}</td>
+          <td style="color: var(--text-muted); font-size: 0.85rem;">{{ r.execution_time_sec }}s</td>
+          <td>
+            {% if r.hard_violations == 0 %}
+              <span class="badge badge-success">Optimal</span>
+            {% else %}
+              <span class="badge badge-warning">{{ r.hard_violations }} Conflicts</span>
+            {% endif %}
+          </td>
+          <td style="text-align: right;">
+            <div style="display: inline-flex; gap: 6px;">
+              <a href="{{ url_for('results_page', run_id=r.id) }}" class="btn btn-primary btn-sm" title="View Full Telemetry">
+                View
+              </a>
+              <a href="{{ url_for('reports_page', run_id=r.id) }}" class="btn btn-secondary btn-sm" title="View Printable Report">
+                Report
+              </a>
+              <form action="{{ url_for('delete_history_action', run_id=r.id) }}" method="POST" onsubmit="return confirmDelete('Delete optimization run #{{ r.id }} and its allocations permanently?');">
+                <button type="submit" class="btn btn-danger btn-sm" title="Delete Run">
+                  🗑️
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10" style="text-align: center; padding: 40px; color: var(--text-muted);">
+            No optimization history recorded yet. Run the Genetic Algorithm from the Control Center.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

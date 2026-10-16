@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Run Optimization{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+  <div class="glass-card-header">
+    <div>
+      <div class="glass-card-title">
+        <span>🧬 Genetic Algorithm Optimization Control Center</span>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 4px;">
+        Tune Genetic Algorithm hyperparameters to search for Pareto-optimal, conflict-free campus resource allocations.
+      </p>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 24px;">
+    <!-- Problem Space Overview -->
+    <div style="background: rgba(15, 23, 42, 0.6); padding: 20px; border-radius: 12px; border: 1px solid var(--border-subtle);">
+      <h4 style="font-size: 1rem; color: #60A5FA; margin-bottom: 14px;">📋 Problem Space Scope</h4>
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.9rem;">
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-muted);">Active Sessions to Schedule:</span>
+          <strong style="color: #34D399;">{{ active_activities | length }} activities</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-muted);">Total Inactive / Disabled:</span>
+          <span style="color: var(--text-dim);">{{ total_activities_count - (active_activities | length) }} sessions</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-muted);">Available Campus Facilities:</span>
+          <strong>{{ resources | length }} assets</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-muted);">Standard Time Slots Pool:</span>
+          <strong>{{ time_slots | length }} slots / week</strong>
+        </div>
+      </div>
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 0.82rem; color: var(--text-dim);">
+        Combinatorial State Space: ~{{ resources | length }}^{{ active_activities | length }} potential configurations.
+      </div>
+    </div>
+
+    <!-- Algorithm Constraints Engine Summary -->
+    <div style="background: rgba(15, 23, 42, 0.6); padding: 20px; border-radius: 12px; border: 1px solid var(--border-subtle);">
+      <h4 style="font-size: 1rem; color: #A78BFA; margin-bottom: 14px;">🛡️ Enforced Constraint Rules</h4>
+      <ul style="list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 0.86rem;">
+        <li style="display: flex; gap: 8px;">
+          <span style="color: #EF4444;">●</span>
+          <span><strong>Hard Constraint:</strong> No capacity deficit (Facility seats &ge; cohort size).</span>
+        </li>
+        <li style="display: flex; gap: 8px;">
+          <span style="color: #EF4444;">●</span>
+          <span><strong>Hard Constraint:</strong> Strict facility category match (Lab &harr; Lab).</span>
+        </li>
+        <li style="display: flex; gap: 8px;">
+          <span style="color: #EF4444;">●</span>
+          <span><strong>Hard Constraint:</strong> Zero double-booking collisions in identical time slots.</span>
+        </li>
+        <li style="display: flex; gap: 8px;">
+          <span style="color: #3B82F6;">●</span>
+          <span><strong>Soft Objective:</strong> Exponential reward for high priority tiers ($w(P_i) \in [1, 11]$).</span>
+        </li>
+        <li style="display: flex; gap: 8px;">
+          <span style="color: #10B981;">●</span>
+          <span><strong>Soft Objective:</strong> High occupancy efficiency without wasted empty seats.</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Genetic Algorithm Form -->
+  <form id="gaRunForm" method="POST" action="{{ url_for('run_optimization') }}">
+    <div style="background: rgba(15, 23, 42, 0.4); padding: 22px; border-radius: 12px; border: 1px solid var(--border-subtle); margin-bottom: 24px;">
+      <h4 style="font-size: 1.05rem; margin-bottom: 16px; color: #FFFFFF;">⚙️ Evolutionary Hyperparameters</h4>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Population Size ($N_{\text{pop}}$)</label>
+          <input type="number" name="population_size" class="form-control" min="10" max="250" value="50" required>
+          <small style="color: var(--text-dim); font-size: 0.78rem;">Number of candidate solutions per generation (10–250)</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Number of Generations ($G$)</label>
+          <input type="number" name="generations" class="form-control" min="5" max="200" value="40" required>
+          <small style="color: var(--text-dim); font-size: 0.78rem;">Evolutionary iterations to run (5–200)</small>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Crossover Rate ($P_c$)</label>
+          <input type="number" step="0.05" name="crossover_rate" class="form-control" min="0.1" max="1.0" value="0.85" required>
+          <small style="color: var(--text-dim); font-size: 0.78rem;">Probability of single-point gene recombination (0.10–1.00)</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Mutation Rate ($P_m$)</label>
+          <input type="number" step="0.01" name="mutation_rate" class="form-control" min="0.01" max="0.5" value="0.15" required>
+          <small style="color: var(--text-dim); font-size: 0.78rem;">Probability of stochastic gene perturbation (0.01–0.50)</small>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Elitism Count ($e$)</label>
+          <input type="number" name="elitism_count" class="form-control" min="1" max="10" value="2" required>
+          <small style="color: var(--text-dim); font-size: 0.78rem;">Top individuals directly cloned to next generation</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Tournament Size ($k$)</label>
+          <input type="number" name="tournament_size" class="form-control" min="2" max="10" value="3" required>
+          <small style="color: var(--text-dim); font-size: 0.78rem;">Sub-population sample size for parent selection</small>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Random Seed (Optional)</label>
+          <input type="number" name="random_seed" class="form-control" placeholder="e.g. 42 (for deterministic replication)">
+          <small style="color: var(--text-dim); font-size: 0.78rem;">Leave blank for non-deterministic exploration</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Execution Progress Bar (Controlled via AJAX in main.js) -->
+    <div id="gaProgressContainer" style="display: none; margin-bottom: 24px; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-glow); padding: 20px; border-radius: 12px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+        <span id="gaStatusText" style="font-size: 0.9rem; font-weight: 600; color: #60A5FA;">
+          Initializing population...
+        </span>
+      </div>
+      <div style="height: 10px; width: 100%; background: rgba(255, 255, 255, 0.1); border-radius: 9999px; overflow: hidden;">
+        <div id="gaProgressBar" style="height: 100%; width: 10%; background: linear-gradient(90deg, #3B82F6 0%, #8B5CF6 100%); transition: width 0.3s ease;"></div>
+      </div>
+    </div>
+
+    <!-- Submit Trigger Button -->
+    <div style="display: flex; justify-content: flex-end; gap: 12px;">
+      <button type="submit" id="gaRunBtn" class="btn btn-primary" style="padding: 12px 28px; font-size: 1.05rem;">
+        🚀 Launch Genetic Algorithm Optimization
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

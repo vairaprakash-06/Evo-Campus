@@ -1,14 +1,15 @@
 # 📄 Smart Campus Resource Optimizer: Comprehensive Academic Project Report
 
 **Project Title:** Smart Campus Resource Allocation and Capacity Optimization using Genetic Algorithms  
-**Course:** Evolutionary Computing (EC) / Bio-Inspired Artificial Intelligence  
-**Team Name:** EvoNex  
+**Course:** Bio-Inspired Artificial Intelligence & Optimization  
+**Team Name:** EvoCampus  
 **Team Tagline:** *“Evolving Intelligence, Optimizing Tomorrow.”*  
 **Date:** Academic Year 2026  
 
 ---
 
 ## 1. Abstract
+
 Institutional resource management in modern universities involves distributing finite physical assets—such as general-purpose classrooms, high-performance computer laboratories, specialized experimental apparatus, and operational budgets—among competing academic departments, student cohorts, and research labs. This operational problem maps directly to the multi-dimensional, multi-choice knapsack problem (MMKP), proven to be NP-hard. 
 
 Traditional heuristic or manual spreadsheet allocations frequently produce sub-optimal schedules characterized by severe resource bottlenecks, under-utilized physical facilities, and neglect of high-priority academic milestones (e.g., capstone defenses and accredited laboratory practicals). 
@@ -18,6 +19,7 @@ This project presents the **Smart Campus Resource Optimizer**, a full-stack deci
 ---
 
 ## 2. Problem Statement
+
 Campus administrators routinely encounter conflicting operational trade-offs:
 1. **Severe Resource Scarcity**: Departmental demand for specialized computer laboratories and sensor kits regularly exceeds available inventory.
 2. **Conflicting Priorities**: Accredited curriculum sessions and final examinations require near-100% resource fulfillment, whereas informal elective workshops can tolerate proportional compromises.
@@ -27,6 +29,7 @@ Campus administrators routinely encounter conflicting operational trade-offs:
 ---
 
 ## 3. Objectives
+
 The key objectives of this project are:
 1. **Model the University Resource Allocation Problem (URAP)** as a multi-constrained combinatorial optimization model.
 2. **Engineer a Pure Python Genetic Algorithm** from first principles, avoiding black-box closed solvers.
@@ -39,7 +42,7 @@ The key objectives of this project are:
 
 ## 4. Existing System vs. Proposed System
 
-| Dimension | Existing System (Manual / Rule-Based) | Proposed System (**EvoNex Smart Campus Optimizer**) |
+| Dimension | Existing System (Manual / Rule-Based) | Proposed System (**EvoCampus Smart Campus Optimizer**) |
 | :--- | :--- | :--- |
 | **Methodology** | Ad-hoc spreadsheets, first-come-first-served (FCFS), or greedy heuristics. | Genetic Algorithm (GA) utilizing stochastic global search with elitism. |
 | **Priority Handling** | Arbitrary or political; often neglects lower-tier requests or over-allocates early applicants. | Normalized exponential weighting ($w(p) \in [1, 11]$); mathematically optimizes global priority satisfaction. |
@@ -52,6 +55,7 @@ The key objectives of this project are:
 ## 5. Mathematical Formulation
 
 ### 5.1 System Entities and Sets
+
 - Let $\mathcal{R} = \{R_1, R_2, \dots, R_M\}$ be the set of $M$ distinct campus resource categories (e.g., Classroom, Computer Lab, Equipment).
 - Let each resource $R_j$ have an upper capacity limit:
   $$\text{Cap}(R_j) \in \mathbb{Z}^+, \quad \forall j \in \{1, \dots, M\}$$
@@ -66,11 +70,13 @@ The key objectives of this project are:
 - Let $B \in \mathbb{R}^+$ represent the maximum institutional budget ceiling.
 
 ### 5.2 Decision Variable & Chromosome Encoding
+
 The chromosome is encoded as an integer vector $\mathbf{X}$ of length $N$:
 $$\mathbf{X} = [x_1, x_2, \dots, x_N]^\top \in \mathbb{Z}^N$$
 where each gene $x_i$ denotes the integer number of resource units allocated to activity $A_i$.
 
 ### 5.3 Objective Function (Fitness Function)
+
 The optimization goal is to maximize the composite fitness function $\mathcal{F}(\mathbf{X})$:
 
 $$\max_{\mathbf{X}} \mathcal{F}(\mathbf{X}) = \mathcal{S}_{\text{priority}}(\mathbf{X}) + \beta \cdot \mathcal{U}_{\text{capacity}}(\mathbf{X}) - \mathcal{P}_{\text{violation}}(\mathbf{X})$$
@@ -89,6 +95,7 @@ Where:
    $$\mathcal{P}_{\text{violation}}(\mathbf{X}) = 200 \sum_{j=1}^M \max\left(0, \sum_{i: T_i = R_j} x_i - \text{Cap}(R_j)\right) + 150 \max\left(0, \frac{\sum_{i=1}^N x_i C_i - B}{B}\right)$$
 
 ### 5.4 Hard Constraints
+
 A candidate vector $\mathbf{X}$ is strictly feasible if and only if:
 1. **Demand Boundedness**:
    $$0 \le x_i \le D_i, \quad \forall i \in \{1, \dots, N\}$$
@@ -102,12 +109,14 @@ A candidate vector $\mathbf{X}$ is strictly feasible if and only if:
 ## 6. Genetic Algorithm Design & Operators
 
 ### 6.1 Feasibility Repair Operator
-Rather than discarding infeasible individuals (death penalty), the EvoNex optimizer implements a deterministic repair operator $\mathcal{R}(\mathbf{X})$:
+
+Rather than discarding infeasible individuals (death penalty), the EvoCampus optimizer implements a deterministic repair operator $\mathcal{R}(\mathbf{X})$:
 1. **Step 1: Bounds Clamping**: Clamps every gene $x_i \leftarrow \min(D_i, \max(0, x_i))$.
 2. **Step 2: Capacity Repair**: For any resource $R_j$ where $\sum x_i > \text{Cap}(R_j)$, activities assigned to $R_j$ are sorted by ascending priority and descending cost. Allocations are iteratively trimmed from the lowest-priority activity until the capacity ceiling is respected.
 3. **Step 3: Budget Repair**: If total cost exceeds $B$, non-zero activities are sorted by lowest priority and trimmed until $\sum x_i C_i \le B$.
 
 ### 6.2 Initial Population Seeding
+
 The population of size $N_{\text{pop}}$ is initialized with a combination of domain-specific heuristics and stochastic exploration:
 - **Individual 1 (Greedy Prioritized)**: Fills demand starting from Priority 5 down to Priority 1, repaired to budget/capacity.
 - **Individual 2 (Proportional Scaled)**: Allocates $\lfloor 0.50 \cdot D_i \rfloor$ across all activities.
@@ -116,6 +125,7 @@ The population of size $N_{\text{pop}}$ is initialized with a combination of dom
 - **Individuals $5 \dots N_{\text{pop}}$ (Uniform Random)**: Each gene randomized $x_i \sim \mathcal{U}\{0, D_i\}$ and repaired.
 
 ### 6.3 Genetic Operators
+
 1. **Selection (Tournament Selection)**: Samples $k=3$ random chromosomes from the population and selects the individual with highest fitness.
 2. **Crossover (Single-Point Crossover)**: Given parents $\mathbf{P}_1, \mathbf{P}_2$ and crossover probability $P_c \approx 0.85$, a crossover point $c \in \{1, \dots, N-1\}$ is chosen uniformly at random:
    $$\mathbf{C}_1 = [p_{1,1}, \dots, p_{1,c}, p_{2,c+1}, \dots, p_{2,N}], \quad \mathbf{C}_2 = [p_{2,1}, \dots, p_{2,c}, p_{1,c+1}, \dots, p_{1,N}]$$
@@ -127,7 +137,7 @@ The population of size $N_{\text{pop}}$ is initialized with a combination of dom
 ## 7. Algorithm Pseudocode
 
 ```text
-Algorithm: EvoNex Genetic Algorithm for Campus Resource Allocation
+Algorithm: EvoCampus Genetic Algorithm for Campus Resource Allocation
 Input:
   Activities A = {A_1, ..., A_N}
   Resource Capacities Cap = {R_1: C_1, ..., R_M: C_M}
@@ -228,6 +238,7 @@ graph TB
 ## 9. Requirements Specifications
 
 ### 9.1 Functional Requirements
+
 - **FR-1**: System shall maintain persistent storage for resources and academic activities in an ACID-compliant SQLite database.
 - **FR-2**: System shall prevent duplicate activity or resource names.
 - **FR-3**: System shall prevent deletion of any resource linked to existing academic activities.
@@ -239,6 +250,7 @@ graph TB
 - **FR-9**: System shall render interactive Plotly convergence plots and export results as RFC-4180 CSV files.
 
 ### 9.2 Non-Functional Requirements
+
 - **NFR-1 (Performance)**: GA convergence for up to 50 activities and 200 generations must complete within 2.0 seconds on standard consumer CPUs.
 - **NFR-2 (Reliability)**: The system must handle zero active activities or unfeasible budgets gracefully without throwing uncaught exceptions.
 - **NFR-3 (Usability)**: Responsive navigation layout with dark navy theme and modern typography.
@@ -270,18 +282,21 @@ The repository contains an automated test suite executed via `pytest` and Python
 ## 11. Advantages and Limitations
 
 ### Advantages
+
 1. **Global Search Capability**: Overcomes the myopic traps of traditional greedy FCFS heuristics by exploring combinations across the multi-resource landscape.
 2. **Deterministic Feasibility**: Guaranteeing 100% feasibility via intelligent repair prevents unexecutable allocation plans.
 3. **Priority Sensitivity**: High-priority degree requirements and exams receive protected allocation even under severe resource contraction.
 4. **Complete Transparency**: Unlike black-box neural networks, every step of the genetic algorithm (fitness formula, weights, mutation rates) is transparent and auditable.
 
 ### Limitations
+
 1. **Discrete Integer Granularity**: Current model optimizes discrete quantities per session rather than dynamic continuous-time interval scheduling (e.g. 9:00 AM - 11:00 AM slotting).
 2. **Static Capacity Bounds**: Assumes fixed capacity limits throughout the run without time-varying availability or maintenance schedules.
 
 ---
 
 ## 12. Future Enhancements
+
 1. **Multi-Objective Pareto Optimization (NSGA-II)**: Transition to Non-dominated Sorting Genetic Algorithm II to simultaneously optimize three distinct objectives: fitness, budget minimization, and carbon footprint.
 2. **Spatio-Temporal Time-Slot Scheduling**: Extend chromosome encoding to matrix form $\mathbf{X} \in \mathbb{Z}^{N \times T}$ to schedule both room allocation and time-slot timetabling.
 3. **Cloud Database Integration**: Provide direct connectors to PostgreSQL/Supabase for persistent multi-tenant deployments on Streamlit Community Cloud.
@@ -289,16 +304,18 @@ The repository contains an automated test suite executed via `pytest` and Python
 ---
 
 ## 13. Conclusion
-The **Smart Campus Resource Optimizer** successfully demonstrates how Evolutionary Computing and Genetic Algorithms solve complex, constrained institutional resource scheduling problems. By synthesizing priority-weighted fitness evaluation, tournament selection, single-point crossover, gene mutation, elitism, and strict feasibility repair, the system reliably converges on optimal allocations in sub-second execution times. 
 
-Developed by **Team EvoNex**, the platform fulfills all technical and academic requirements of the college Evolutionary Computing project, providing a modular, fully tested, and professionally documented open-source solution.
+The **Smart Campus Resource Optimizer** successfully demonstrates how Genetic Algorithms solve complex, constrained institutional resource scheduling problems. By synthesizing priority-weighted fitness evaluation, tournament selection, single-point crossover, gene mutation, elitism, and strict feasibility repair, the system reliably converges on optimal allocations in sub-second execution times. 
+
+Developed by **Team EvoCampus**, the platform fulfills all technical and academic requirements of the college optimization project, providing a modular, fully tested, and professionally documented open-source solution.
 
 ---
 
 ## 14. References
+
 1. **Goldberg, D. E.** (1989). *Genetic Algorithms in Search, Optimization, and Machine Learning*. Addison-Wesley.
 2. **Deb, K., Pratap, A., Agarwal, S., & Meyarivan, T.** (2002). A fast and elitist multiobjective genetic algorithm: NSGA-II. *IEEE Transactions on Evolutionary Computation*, 6(2), 182-197.
-3. **Eiben, A. E., & Smith, J. E.** (2015). *Introduction to Evolutionary Computing* (2nd ed.). Natural Computing Series, Springer.
+3. **Mitchell, M.** (1998). *An Introduction to Genetic Algorithms*. MIT Press.
 4. **Michalewicz, Z.** (1996). *Genetic Algorithms + Data Structures = Evolution Programs*. Springer Science & Business Media.
 5. **Burke, E. K., Kingston, J. H., & de Werra, D.** (2004). Applications to school timetabling. In *Handbook of Graph Theory* (pp. 445-474). CRC Press.
 6. **Holland, J. H.** (1992). *Adaptation in Natural and Artificial Systems: An Introductory Analysis with Applications to Biology, Control, and Artificial Intelligence*. MIT Press.

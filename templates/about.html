@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}About Project{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+  <!-- Header Banner -->
+  <div style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 20px; margin-bottom: 24px;">
+    <div style="font-size: 0.85rem; color: #60A5FA; text-transform: uppercase; font-weight: 700; letter-spacing: 0.08em;">
+      Academic Project Report
+    </div>
+    <h2 style="font-size: 2rem; margin: 6px 0; color: #FFFFFF;">
+      Smart Campus Resource Optimizer
+    </h2>
+    <p style="font-size: 1.05rem; color: var(--text-muted); font-style: italic;">
+      “Evolving Intelligence, Optimizing Tomorrow.” &bull; Developed by Team EvoCampus
+    </p>
+  </div>
+
+  <!-- Section 1: Project Overview & Objectives -->
+  <div style="margin-bottom: 28px;">
+    <h3 style="font-size: 1.25rem; color: #60A5FA; margin-bottom: 12px;">1. Project Overview & Objectives</h3>
+    <p style="font-size: 0.95rem; color: var(--text-muted); line-height: 1.65; margin-bottom: 14px;">
+      Modern academic institutions face severe challenges in allocating finite physical campus assets—such as general lecture halls,
+      specialized computer labs, hardware engineering rooms, and seminar auditoriums—among competing departmental requests. 
+      This scheduling challenge maps directly to the NP-hard Multi-Dimensional Knapsack and Timetabling Problem.
+    </p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #34D399;">Objective 1: Multi-Constraint Satisfaction</strong>
+        <p style="font-size: 0.85rem; color: var(--text-dim); margin-top: 4px;">
+          Guarantee zero double-booking collisions, respect seating capacity limits, and enforce facility category matching.
+        </p>
+      </div>
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #60A5FA;">Objective 2: Priority-Weighted Fairness</strong>
+        <p style="font-size: 0.85rem; color: var(--text-dim); margin-top: 4px;">
+          Protect critical capstone defenses and accredited practical labs using exponential weighting ($w \in [1, 11]$).
+        </p>
+      </div>
+      <div style="background: rgba(15, 23, 42, 0.6); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #A78BFA;">Objective 3: Occupancy & Budget Efficiency</strong>
+        <p style="font-size: 0.85rem; color: var(--text-dim); margin-top: 4px;">
+          Maximize seating occupancy ratio while minimizing unused seats and respecting departmental operational budgets.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Mathematical Formulation -->
+  <div style="margin-bottom: 28px;">
+    <h3 style="font-size: 1.25rem; color: #60A5FA; margin-bottom: 12px;">2. Mathematical Fitness Function</h3>
+    <div style="background: rgba(15, 23, 42, 0.8); padding: 20px; border-radius: 12px; border: 1px solid var(--border-glow); font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.7; color: #F8FAFC; margin-bottom: 14px;">
+      $$\max_{\mathbf{X}} \mathcal{F}(\mathbf{X}) = 1000 + \sum_{i=1}^{N} \left[ w(P_i) \cdot 40 + \left( \frac{\text{Students}_i}{\text{Cap}(R_i)} \right) \cdot 25 \right] - \mathcal{P}_{\text{violations}}(\mathbf{X})$$
+    </div>
+    <p style="font-size: 0.92rem; color: var(--text-muted); line-height: 1.6;">
+      Where:
+      <br>&bull; <strong>$w(P_i)$</strong> is the priority factor: Tier 1 (1.0), Tier 2 (2.0), Tier 3 (4.0), Tier 4 (7.0), Tier 5 (11.0).
+      <br>&bull; <strong>$\mathcal{P}_{\text{violations}}$</strong> enforces heavy penalties: -500 for category mismatch, -450 per time-slot double booking collision, and -350 for capacity deficits.
+    </p>
+  </div>
+
+  <!-- Section 3: Genetic Algorithm Operators -->
+  <div style="margin-bottom: 28px;">
+    <h3 style="font-size: 1.25rem; color: #60A5FA; margin-bottom: 12px;">3. Genetic Algorithm Operators</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+      <div style="background: rgba(15, 23, 42, 0.5); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #FBBF24;">🧬 Chromosome Encoding</strong>
+        <p style="font-size: 0.86rem; color: var(--text-dim); margin-top: 4px;">
+          Vector of tuples $\mathbf{X} = [(R_1, T_1), (R_2, T_2), \dots, (R_N, T_N)]$ where each gene encodes the assigned facility ID and scheduled time slot.
+        </p>
+      </div>
+
+      <div style="background: rgba(15, 23, 42, 0.5); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #60A5FA;">🏆 Tournament Selection</strong>
+        <p style="font-size: 0.86rem; color: var(--text-dim); margin-top: 4px;">
+          Samples $k=3$ random chromosomes and selects the highest-fitness individual for parenthood, balancing exploitation and diversity.
+        </p>
+      </div>
+
+      <div style="background: rgba(15, 23, 42, 0.5); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #34D399;">✂️ Single-Point Crossover</strong>
+        <p style="font-size: 0.86rem; color: var(--text-dim); margin-top: 4px;">
+          Recombines parent chromosomes with probability $P_c \approx 0.85$, splicing allocation vectors across cut points.
+        </p>
+      </div>
+
+      <div style="background: rgba(15, 23, 42, 0.5); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #F87171;">🎲 Stochastic Gene Mutation</strong>
+        <p style="font-size: 0.86rem; color: var(--text-dim); margin-top: 4px;">
+          Perturbs genes with probability $P_m \approx 0.15$, reassigning facilities or swapping time slots to escape local optima.
+        </p>
+      </div>
+
+      <div style="background: rgba(15, 23, 42, 0.5); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #A78BFA;">👑 Elitism Preservation</strong>
+        <p style="font-size: 0.86rem; color: var(--text-dim); margin-top: 4px;">
+          Copies the top $e=2$ fittest candidate chromosomes unchanged into subsequent generations to prevent evolutionary regression.
+        </p>
+      </div>
+
+      <div style="background: rgba(15, 23, 42, 0.5); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle);">
+        <strong style="color: #38BDF8;">🛠️ Feasibility Repair Engine</strong>
+        <p style="font-size: 0.86rem; color: var(--text-dim); margin-top: 4px;">
+          Intelligent repair operator resolves scheduling collisions and capacity breaches by dynamically re-routing sessions to compatible vacant slots.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 4: Technology Stack -->
+  <div style="margin-bottom: 20px;">
+    <h3 style="font-size: 1.25rem; color: #60A5FA; margin-bottom: 12px;">4. Verified Technology Stack</h3>
+    <table class="custom-table" style="font-size: 0.9rem;">
+      <thead>
+        <tr>
+          <th>System Layer</th>
+          <th>Technology</th>
+          <th>Implementation Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Backend Framework</td>
+          <td><strong>Python &bull; Flask</strong></td>
+          <td>REST routing, server-side validation, and HTML rendering</td>
+        </tr>
+        <tr>
+          <td>Optimization Core</td>
+          <td><strong>Pure Python &bull; NumPy</strong></td>
+          <td>Genetic Algorithm chromosome encoding, tournament selection, crossover, and repair</td>
+        </tr>
+        <tr>
+          <td>Database Engine</td>
+          <td><strong>SQLite 3</strong></td>
+          <td>ACID-compliant relational schema, auto-seeding, and audit logging</td>
+        </tr>
+        <tr>
+          <td>Presentation & Styling</td>
+          <td><strong>HTML5 &bull; Custom Vanilla CSS</strong></td>
+          <td>Modern dark navy glassmorphic design system and micro-animations</td>
+        </tr>
+        <tr>
+          <td>Visual Telemetry</td>
+          <td><strong>Chart.js</strong></td>
+          <td>Interactive convergence curves, occupancy bars, and doughnut breakdowns</td>
+        </tr>
+        <tr>
+          <td>Automated Testing</td>
+          <td><strong>pytest</strong></td>
+          <td>Automated unit & integration verification for GA operators and DB transactions</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

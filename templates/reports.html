@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Academic Report #{{ run.id }}{% endblock %}
+
+{% block content %}
+<div class="glass-card" style="max-width: 1000px; margin: 0 auto; background: rgba(15, 23, 42, 0.95);">
+  <!-- Printable Actions (Hidden during print) -->
+  <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 14px; border-bottom: 1px solid var(--border-subtle);">
+    <a href="{{ url_for('results_page', run_id=run.id) }}" class="btn btn-secondary btn-sm">
+      &larr; Back to Results Dashboard
+    </a>
+    <div style="display: flex; gap: 10px;">
+      <a href="{{ url_for('export_csv', run_id=run.id) }}" class="btn btn-secondary btn-sm">
+        📥 Export CSV
+      </a>
+      <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">
+        🖨️ Print Academic Report
+      </button>
+    </div>
+  </div>
+
+  <!-- Formal Academic Header -->
+  <div style="text-align: center; border-bottom: 2px solid var(--border-subtle); padding-bottom: 20px; margin-bottom: 24px;">
+    <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: #60A5FA; font-weight: 700;">
+      College of Engineering &bull; Department of Computer Science
+    </div>
+    <h2 style="font-size: 1.8rem; margin: 8px 0; color: #FFFFFF;">
+      Smart Campus Resource Optimizer
+    </h2>
+    <div style="font-size: 1rem; color: var(--text-muted); font-style: italic;">
+      Academic Year 2026
+    </div>
+    <div style="display: inline-block; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); padding: 4px 14px; border-radius: 9999px; font-size: 0.82rem; font-weight: 600; color: #93C5FD; margin-top: 10px;">
+      Team EvoCampus &bull; “Evolving Intelligence, Optimizing Tomorrow.”
+    </div>
+  </div>
+
+  <!-- Run Metadata Overview -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; background: rgba(30, 41, 59, 0.5); padding: 16px; border-radius: 10px; border: 1px solid var(--border-subtle); font-size: 0.88rem;">
+    <div><strong>Report ID:</strong> ECO-RUN-{{ run.id }}</div>
+    <div><strong>Execution Date:</strong> {{ run.timestamp }}</div>
+    <div><strong>Solver Engine:</strong> Genetic Algorithm (Pure Python)</div>
+    <div><strong>Execution Status:</strong> <span style="color: #34D399; font-weight: 700;">{{ run.status }}</span></div>
+  </div>
+
+  <!-- Executive Summary -->
+  <div style="margin-bottom: 24px;">
+    <h3 style="font-size: 1.15rem; color: #60A5FA; border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px; margin-bottom: 12px;">
+      1. Executive Optimization Summary
+    </h3>
+    <p style="font-size: 0.92rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px;">
+      The Genetic Algorithm successfully processed <strong>{{ run.total_activities }} academic activities</strong> across 
+      {{ resources | length }} campus resources. The solver converged at generation <strong>{{ run.generations }}</strong> with a 
+      peak fitness score of <strong>{{ run.best_fitness }}</strong>, achieving a physical campus seating utilization rate of 
+      <strong>{{ run.resource_utilization_pct }}%</strong> and an operating financial budget of <strong>${{ run.total_cost }}</strong>.
+    </p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; text-align: center;">
+      <div style="border: 1px solid var(--border-subtle); padding: 10px; border-radius: 8px;">
+        <div style="font-size: 0.75rem; color: var(--text-dim);">Allocated Sessions</div>
+        <div style="font-size: 1.3rem; font-weight: 700; color: #34D399;">{{ run.allocated_activities }} / {{ run.total_activities }}</div>
+      </div>
+      <div style="border: 1px solid var(--border-subtle); padding: 10px; border-radius: 8px;">
+        <div style="font-size: 0.75rem; color: var(--text-dim);">Campus Utilization</div>
+        <div style="font-size: 1.3rem; font-weight: 700; color: #A78BFA;">{{ run.resource_utilization_pct }}%</div>
+      </div>
+      <div style="border: 1px solid var(--border-subtle); padding: 10px; border-radius: 8px;">
+        <div style="font-size: 0.75rem; color: var(--text-dim);">Operating Cost</div>
+        <div style="font-size: 1.3rem; font-weight: 700; color: #FBBF24;">${{ run.total_cost }}</div>
+      </div>
+      <div style="border: 1px solid var(--border-subtle); padding: 10px; border-radius: 8px;">
+        <div style="font-size: 0.75rem; color: var(--text-dim);">Compute Runtime</div>
+        <div style="font-size: 1.3rem; font-weight: 700; color: #38BDF8;">{{ run.execution_time_sec }}s</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Genetic Algorithm Hyperparameter Configuration -->
+  <div style="margin-bottom: 24px;">
+    <h3 style="font-size: 1.15rem; color: #60A5FA; border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px; margin-bottom: 12px;">
+      2. Genetic Algorithm Hyperparameter Audit
+    </h3>
+    <table class="custom-table" style="font-size: 0.85rem;">
+      <thead>
+        <tr>
+          <th>Hyperparameter</th>
+          <th>Configured Value</th>
+          <th>Design Function in GA Search</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Population Size ($N_{\text{pop}}$)</td>
+          <td><strong>{{ run.population_size }}</strong></td>
+          <td>Maintains genetic diversity across multi-facility candidate solutions.</td>
+        </tr>
+        <tr>
+          <td>Max Generations ($G$)</td>
+          <td><strong>{{ run.generations }}</strong></td>
+          <td>Evolutionary epoch iterations allowed before convergence freeze.</td>
+        </tr>
+        <tr>
+          <td>Crossover Probability ($P_c$)</td>
+          <td><strong>{{ run.crossover_rate }}</strong></td>
+          <td>Single-point recombination exchanging tail assignments between parent pairs.</td>
+        </tr>
+        <tr>
+          <td>Mutation Probability ($P_m$)</td>
+          <td><strong>{{ run.mutation_rate }}</strong></td>
+          <td>Stochastic gene perturbation exploring unoccupied time slots and alternative facilities.</td>
+        </tr>
+        <tr>
+          <td>Elitism Count ($e$)</td>
+          <td><strong>{{ run.elitism_count }}</strong></td>
+          <td>Deterministic preservation of top-performing candidate chromosomes.</td>
+        </tr>
+        <tr>
+          <td>Tournament Size ($k$)</td>
+          <td><strong>{{ run.tournament_size }}</strong></td>
+          <td>Selection pressure balancing exploration with fitness exploitation.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Allocation Manifest Table -->
+  <div style="margin-bottom: 24px;">
+    <h3 style="font-size: 1.15rem; color: #60A5FA; border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px; margin-bottom: 12px;">
+      3. Final Resource Allocation Manifest
+    </h3>
+    <table class="custom-table" style="font-size: 0.82rem;">
+      <thead>
+        <tr>
+          <th>Session Name</th>
+          <th>Dept</th>
+          <th>Size</th>
+          <th>Priority</th>
+          <th>Assigned Facility</th>
+          <th>Day & Time Slot</th>
+          <th>Cost</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in allocations %}
+        <tr>
+          <td><strong>{{ a.activity_name }}</strong></td>
+          <td>{{ a.department }}</td>
+          <td>{{ a.num_students }}</td>
+          <td>P{{ a.priority }}</td>
+          <td>{{ a.resource_name }} ({{ a.resource_type }})</td>
+          <td>{{ a.day }} {{ a.time_slot }}</td>
+          <td>${{ a.cost }}</td>
+          <td>
+            {% if a.status == 'Allocated' %}
+              <span style="color: #34D399; font-weight: 700;">✓ Allocated</span>
+            {% else %}
+              <span style="color: #F87171; font-weight: 700;">✗ {{ a.status }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Formal Sign-Off Footer -->
+  <div style="margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted);">
+    <div>
+      <div><strong>Report Generated By:</strong> Team EvoCampus</div>
+      <div><strong>Project Lead:</strong> Student Project Group</div>
+    </div>
+    <div style="text-align: right;">
+      <div><strong>Institutional Verification:</strong> Verified Automated GA Telemetry</div>
+      <div><strong>Document Status:</strong> Official College Submission</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

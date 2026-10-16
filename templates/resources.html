@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Resource Management{% endblock %}
+
+{% block content %}
+<div class="glass-card">
+  <div class="glass-card-header">
+    <div>
+      <div class="glass-card-title">
+        <span>🏛️ Campus Resource Management</span>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 4px;">
+        Configure classrooms, laboratories, seminar halls, and specialized apparatus capacities.
+      </p>
+    </div>
+    <button type="button" class="btn btn-primary" onclick="openModal('addResourceModal')">
+      ➕ Add New Resource
+    </button>
+  </div>
+
+  <!-- Search & Filter Controls -->
+  <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px;">
+    <div style="flex: 2; min-width: 220px;">
+      <input type="text" id="resourceSearchInput" class="form-control" placeholder="🔍 Search resource by name or location...">
+    </div>
+    <div style="flex: 1; min-width: 160px;">
+      <select id="resourceTypeFilter" class="form-select">
+        <option value="">All Resource Types</option>
+        {% for rt in resource_types %}
+          <option value="{{ rt }}">{{ rt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="flex: 1; min-width: 140px;">
+      <select id="resourceAvailFilter" class="form-select">
+        <option value="">All Availabilities</option>
+        <option value="Available">Available</option>
+        <option value="Maintenance">Maintenance</option>
+        <option value="Reserved">Reserved</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Resources Table -->
+  <div class="table-responsive">
+    <table class="custom-table" id="resourcesTable">
+      <thead>
+        <tr>
+          <th>Resource Name</th>
+          <th>Category</th>
+          <th>Capacity</th>
+          <th>Campus Location</th>
+          <th>Availability</th>
+          <th>Operating Cost</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in resources %}
+        <tr data-name="{{ r.name }}" data-type="{{ r.resource_type }}" data-availability="{{ r.availability }}">
+          <td>
+            <strong>{{ r.name }}</strong>
+          </td>
+          <td>
+            <span class="badge {% if r.resource_type == 'Laboratory' %}badge-info{% elif r.resource_type == 'Seminar Hall' %}badge-warning{% else %}badge-primary{% endif %}">
+              {{ r.resource_type }}
+            </span>
+          </td>
+          <td><strong>{{ r.capacity }}</strong> seats / sets</td>
+          <td style="color: var(--text-muted);">{{ r.location or "Campus Main" }}</td>
+          <td>
+            {% if r.availability == 'Available' %}
+              <span class="badge badge-success">Available</span>
+            {% elif r.availability == 'Maintenance' %}
+              <span class="badge badge-danger">Maintenance</span>
+            {% else %}
+              <span class="badge badge-warning">{{ r.availability }}</span>
+            {% endif %}
+          </td>
+          <td>${{ r.operating_cost }} <span style="font-size: 0.8rem; color: var(--text-dim);">/ hr</span></td>
+          <td style="text-align: right;">
+            <div style="display: inline-flex; gap: 6px;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="openEditResourceModal({{ r | tojson | forceescape }})">
+                ✏️ Edit
+              </button>
+              <form action="{{ url_for('delete_resource_action', resource_id=r.id) }}" method="POST" onsubmit="return confirmDelete('Delete resource \'{{ r.name }}\'?');">
+                <button type="submit" class="btn btn-danger btn-sm">
+                  🗑️
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 30px; color: var(--text-muted);">
+            No campus resources found. Click "Add New Resource" above or reset sample data.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal 1: Add Resource Modal -->
+<div class="modal-overlay" id="addResourceModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title">➕ Add Campus Resource</h3>
+      <button type="button" class="modal-close" onclick="closeModal('addResourceModal')">&times;</button>
+    </div>
+    <form action="{{ url_for('add_resource_action') }}" method="POST">
+      <div class="form-group">
+        <label class="form-label">Resource Name *</label>
+        <input type="text" name="name" class="form-control" required placeholder="e.g. Advanced AI & Robotics Lab">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Resource Category *</label>
+          <select name="resource_type" class="form-select" required>
+            <option value="Classroom">Classroom</option>
+            <option value="Laboratory">Laboratory</option>
+            <option value="Seminar Hall">Seminar Hall</option>
+            <option value="Equipment">Equipment</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Seating / Units Capacity *</label>
+          <input type="number" name="capacity" class="form-control" min="1" max="5000" value="40" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Campus Location</label>
+          <input type="text" name="location" class="form-control" placeholder="e.g. Tech Park - Lab 101">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Operational Availability *</label>
+          <select name="availability" class="form-select" required>
+            <option value="Available" selected>Available</option>
+            <option value="Maintenance">Under Maintenance</option>
+            <option value="Reserved">Reserved</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Operating Cost ($ / hour) *</label>
+        <input type="number" step="1" min="0" max="1000" name="operating_cost" class="form-control" value="25.0" required>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('addResourceModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Resource</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal 2: Edit Resource Modal -->
+<div class="modal-overlay" id="editResourceModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title">✏️ Edit Campus Resource</h3>
+      <button type="button" class="modal-close" onclick="closeModal('editResourceModal')">&times;</button>
+    </div>
+    <form id="editResourceForm" method="POST">
+      <div class="form-group">
+        <label class="form-label">Resource Name *</label>
+        <input type="text" id="edit_res_name" name="name" class="form-control" required>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Resource Category *</label>
+          <select id="edit_res_type" name="resource_type" class="form-select" required>
+            <option value="Classroom">Classroom</option>
+            <option value="Laboratory">Laboratory</option>
+            <option value="Seminar Hall">Seminar Hall</option>
+            <option value="Equipment">Equipment</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Seating / Units Capacity *</label>
+          <input type="number" id="edit_res_capacity" name="capacity" class="form-control" min="1" max="5000" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Campus Location</label>
+          <input type="text" id="edit_res_location" name="location" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Operational Availability *</label>
+          <select id="edit_res_availability" name="availability" class="form-select" required>
+            <option value="Available">Available</option>
+            <option value="Maintenance">Under Maintenance</option>
+            <option value="Reserved">Reserved</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Operating Cost ($ / hour) *</label>
+        <input type="number" step="1" min="0" max="1000" id="edit_res_cost" name="operating_cost" class="form-control" required>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('editResourceModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Update Resource</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function openEditResourceModal(res) {
+  const form = document.getElementById("editResourceForm");
+  form.action = `/resources/edit/${res.id}`;
+  document.getElementById("edit_res_name").value = res.name;
+  document.getElementById("edit_res_type").value = res.resource_type;
+  document.getElementById("edit_res_capacity").value = res.capacity;
+  document.getElementById("edit_res_location").value = res.location || "";
+  document.getElementById("edit_res_availability").value = res.availability;
+  document.getElementById("edit_res_cost").value = res.operating_cost;
+  openModal('editResourceModal');
+}
+</script>
+{% endblock %}

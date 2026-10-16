@@ -1,25 +1,24 @@
 """
 Database management module for Smart Campus Resource Optimizer.
-Developed by Team EvoNex.
-Handles SQLite persistence, schema initialization, sample data seeding,
-and transactional CRUD operations for resources, activities, and optimization history.
+Developed by Team EvoCampus.
+Tagline: "Evolving Intelligence, Optimizing Tomorrow."
+
+Provides SQLite database operations, schema creation, sample data seeding,
+and transactional CRUD functions for resources, activities, and optimization runs.
 """
 
 import sqlite3
 import json
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
-
-
 from contextlib import contextmanager
-
 
 DEFAULT_DB_PATH = "campus_optimizer.db"
 
 
 @contextmanager
 def get_connection(db_path: str = DEFAULT_DB_PATH):
-    """Context manager that yields an SQLite connection and ensures it is properly closed."""
+    """Context manager for SQLite database connection with row factory and foreign keys enabled."""
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -30,41 +29,43 @@ def get_connection(db_path: str = DEFAULT_DB_PATH):
 
 
 def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
-    """
-    Initializes database tables and default sample data if the tables are empty.
-    Preserves all existing data during normal application restarts.
-    """
+    """Initializes all necessary SQLite tables if they do not exist."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
 
-        # Table 1: Resources
+        # Table 1: Campus Resources
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS resources (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
+                resource_type TEXT NOT NULL,
                 capacity INTEGER NOT NULL CHECK(capacity >= 0),
-                unit TEXT NOT NULL DEFAULT 'Units',
-                description TEXT DEFAULT '',
+                location TEXT DEFAULT '',
+                availability TEXT NOT NULL DEFAULT 'Available',
+                operating_cost REAL NOT NULL DEFAULT 0.0 CHECK(operating_cost >= 0),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
 
-        # Table 2: Activities
+        # Table 2: Academic Activities
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS activities (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
-                resource_type TEXT NOT NULL,
-                demand INTEGER NOT NULL CHECK(demand > 0),
+                department TEXT NOT NULL DEFAULT 'Computer Science',
+                num_students INTEGER NOT NULL CHECK(num_students > 0),
+                duration_hours REAL NOT NULL DEFAULT 1.0 CHECK(duration_hours > 0),
+                required_resource_type TEXT NOT NULL,
                 priority INTEGER NOT NULL CHECK(priority BETWEEN 1 AND 5),
-                cost_per_unit REAL NOT NULL CHECK(cost_per_unit >= 0),
+                budget REAL NOT NULL DEFAULT 0.0 CHECK(budget >= 0),
+                preferred_day TEXT DEFAULT 'Monday',
+                preferred_time_slot TEXT DEFAULT '09:00 - 11:00',
                 is_active INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0, 1)),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (resource_type) REFERENCES resources(name) ON UPDATE CASCADE ON DELETE RESTRICT
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
 
-        # Table 3: Optimization Runs
+        # Table 3: Optimization Runs Ledger
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS optimization_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,447 +74,577 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 generations INTEGER NOT NULL,
                 mutation_rate REAL NOT NULL,
                 crossover_rate REAL NOT NULL,
-                budget_limit REAL NOT NULL,
+                elitism_count INTEGER NOT NULL,
+                tournament_size INTEGER NOT NULL DEFAULT 3,
                 random_seed INTEGER,
                 best_fitness REAL NOT NULL,
-                total_demand INTEGER NOT NULL,
-                total_allocated INTEGER NOT NULL,
-                demand_satisfaction_pct REAL NOT NULL,
-                budget_spent REAL NOT NULL,
-                budget_utilization_pct REAL NOT NULL,
+                total_activities INTEGER NOT NULL,
+                allocated_activities INTEGER NOT NULL,
+                unallocated_activities INTEGER NOT NULL,
                 resource_utilization_pct REAL NOT NULL,
+                total_cost REAL NOT NULL,
+                hard_violations INTEGER NOT NULL,
+                soft_violations INTEGER NOT NULL,
                 execution_time_sec REAL NOT NULL,
-                convergence_history_json TEXT
+                status TEXT NOT NULL DEFAULT 'Completed',
+                convergence_json TEXT,
+                notes TEXT
             );
         """)
 
-        # Table 4: Run Allocations Detail
+        # Table 4: Optimization Allocations Detail
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS run_allocations (
+            CREATE TABLE IF NOT EXISTS allocations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 run_id INTEGER NOT NULL,
+                activity_id INTEGER NOT NULL,
                 activity_name TEXT NOT NULL,
-                resource_type TEXT NOT NULL,
+                department TEXT NOT NULL,
+                num_students INTEGER NOT NULL,
                 priority INTEGER NOT NULL,
-                demand INTEGER NOT NULL,
-                allocated INTEGER NOT NULL,
-                unmet INTEGER NOT NULL,
-                satisfaction_pct REAL NOT NULL,
-                cost_per_unit REAL NOT NULL,
-                total_cost REAL NOT NULL,
+                resource_id INTEGER,
+                resource_name TEXT,
+                resource_type TEXT,
+                resource_capacity INTEGER,
+                day TEXT,
+                time_slot TEXT,
+                cost REAL NOT NULL DEFAULT 0.0,
+                status TEXT NOT NULL,
+                violations TEXT,
                 FOREIGN KEY (run_id) REFERENCES optimization_runs(id) ON DELETE CASCADE
             );
         """)
 
         conn.commit()
 
-    # Seed default data if resources table is empty
-    seed_default_data(db_path, overwrite=False)
+    # Automatically seed sample data if tables are brand new and empty
+    seed_default_data(db_path=db_path, overwrite=False)
 
 
 def seed_default_data(db_path: str = DEFAULT_DB_PATH, overwrite: bool = False) -> None:
-    """
-    Seeds realistic campus resource and activity sample data.
-    If overwrite is True, existing data is cleared and refreshed with defaults.
-    """
+    """Populates initial campus resources and academic activities if tables are empty or overwrite requested."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
 
         if overwrite:
-            cursor.execute("DELETE FROM run_allocations;")
+            cursor.execute("DELETE FROM allocations;")
             cursor.execute("DELETE FROM optimization_runs;")
             cursor.execute("DELETE FROM activities;")
             cursor.execute("DELETE FROM resources;")
+            conn.commit()
 
-        cursor.execute("SELECT COUNT(*) AS cnt FROM resources;")
-        res_count = cursor.fetchone()["cnt"]
+        cursor.execute("SELECT COUNT(*) FROM resources;")
+        res_count = cursor.fetchone()[0]
 
         if res_count == 0:
-            default_resources = [
-                ("Classroom", 180, "Seats", "Standard lecture halls and tiered seminar rooms (Block A & B)"),
-                ("Computer Lab", 90, "Workstations", "High-performance computing terminals with GPU acceleration"),
-                ("Equipment", 35, "Sets", "IoT prototyping kits, oscilloscopes, and specialized sensors")
+            sample_resources = [
+                ("Lecture Hall Alpha", "Classroom", 65, "Block A - Floor 1", "Available", 25.0),
+                ("Classroom Beta", "Classroom", 45, "Block A - Floor 2", "Available", 15.0),
+                ("Classroom Gamma", "Classroom", 35, "Block B - Floor 1", "Available", 12.0),
+                ("Advanced AI & Robotics Lab", "Laboratory", 35, "Tech Park - Lab 101", "Available", 50.0),
+                ("Cybersecurity & Cloud Lab", "Laboratory", 30, "Tech Park - Lab 102", "Available", 45.0),
+                ("Electronics & IoT Lab", "Laboratory", 25, "Block C - Lab 201", "Available", 40.0),
+                ("Main University Auditorium", "Seminar Hall", 150, "Central Wing", "Available", 80.0),
+                ("Faculty Board Room", "Seminar Hall", 40, "Admin Block", "Available", 30.0),
+                ("4K Interactive Projector Suite", "Equipment", 100, "Media Center", "Available", 10.0),
+                ("VR / AR Dev Stations", "Equipment", 20, "Innovation Hub", "Available", 35.0)
             ]
-            cursor.executemany(
-                "INSERT INTO resources (name, capacity, unit, description) VALUES (?, ?, ?, ?);",
-                default_resources
-            )
+            cursor.executemany("""
+                INSERT INTO resources (name, resource_type, capacity, location, availability, operating_cost)
+                VALUES (?, ?, ?, ?, ?, ?);
+            """, sample_resources)
 
-        cursor.execute("SELECT COUNT(*) AS cnt FROM activities;")
-        act_count = cursor.fetchone()["cnt"]
+        cursor.execute("SELECT COUNT(*) FROM activities;")
+        act_count = cursor.fetchone()[0]
 
         if act_count == 0:
-            # Realistic academic sample dataset as required by specifications
-            default_activities = [
-                ("AI Lecture", "Classroom", 60, 5, 15.0, 1),
-                ("DBMS Lab", "Computer Lab", 40, 4, 25.0, 1),
-                ("EC Lab", "Equipment", 20, 5, 40.0, 1),
-                ("Project Review", "Classroom", 50, 3, 10.0, 1),
-                ("Coding Workshop", "Computer Lab", 45, 3, 20.0, 1),
-                ("Research Session", "Equipment", 15, 4, 35.0, 1),
-                ("Robotics Seminar", "Classroom", 70, 2, 12.0, 1),
-                ("Cybersecurity Lab", "Computer Lab", 30, 4, 28.0, 1),
+            sample_activities = [
+                ("Deep Learning & Neural Nets Lab", "Computer Science", 32, 2.0, "Laboratory", 5, 150.0, "Monday", "09:00 - 11:00", 1),
+                ("Data Structures & Algorithms Lecture", "Computer Science", 60, 1.5, "Classroom", 5, 60.0, "Monday", "09:00 - 10:30", 1),
+                ("Computer Networks & Security Lab", "Cybersecurity", 28, 2.0, "Laboratory", 4, 120.0, "Monday", "11:00 - 13:00", 1),
+                ("Software Engineering Capstone Seminar", "Information Tech", 120, 2.0, "Seminar Hall", 5, 200.0, "Tuesday", "14:00 - 16:00", 1),
+                ("Microprocessor Embedded Systems Lab", "Electronics", 24, 2.0, "Laboratory", 4, 100.0, "Wednesday", "10:00 - 12:00", 1),
+                ("Discrete Mathematics & Logic Tutorial", "Mathematics", 40, 1.0, "Classroom", 3, 30.0, "Tuesday", "11:00 - 12:00", 1),
+                ("Annual Capstone Project Defense", "Academic Dean", 35, 3.0, "Seminar Hall", 5, 150.0, "Thursday", "09:00 - 12:00", 1),
+                ("Database Systems & Cloud SQL Lecture", "Computer Science", 42, 1.5, "Classroom", 4, 40.0, "Wednesday", "14:00 - 15:30", 1),
+                ("Virtual Reality Dev Workshop", "Multimedia & Game", 18, 2.0, "Equipment", 3, 90.0, "Friday", "10:00 - 12:00", 1),
+                ("Competitive Coding Club Meet", "Student Affairs", 30, 1.5, "Classroom", 2, 25.0, "Friday", "15:00 - 16:30", 1),
+                ("Open Source Hackathon Briefing", "Tech Council", 55, 1.0, "Classroom", 3, 40.0, "Thursday", "14:00 - 15:00", 1),
+                ("Faculty Academic Senate Assembly", "University Board", 30, 2.0, "Seminar Hall", 4, 80.0, "Monday", "14:00 - 16:00", 1)
             ]
-            cursor.executemany(
-                """INSERT INTO activities 
-                   (name, resource_type, demand, priority, cost_per_unit, is_active) 
-                   VALUES (?, ?, ?, ?, ?, ?);""",
-                default_activities
-            )
+            cursor.executemany("""
+                INSERT INTO activities (name, department, num_students, duration_hours, required_resource_type, priority, budget, preferred_day, preferred_time_slot, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, sample_activities)
 
         conn.commit()
 
 
-# ============================================================================
-# Resource Operations
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Resources CRUD
+# ---------------------------------------------------------------------------
 
 def get_resources(db_path: str = DEFAULT_DB_PATH) -> List[Dict[str, Any]]:
-    """Fetches all resources from the database sorted by name."""
+    """Retrieves all campus resources from the database ordered by name."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM resources ORDER BY name ASC;")
-        return [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM resources ORDER BY resource_type, name ASC;")
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
-def get_resource_names(db_path: str = DEFAULT_DB_PATH) -> List[str]:
-    """Returns a list of resource names."""
+def get_resource_by_id(resource_id: int, db_path: str = DEFAULT_DB_PATH) -> Optional[Dict[str, Any]]:
+    """Retrieves a single campus resource by its primary key ID."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM resources ORDER BY name ASC;")
-        return [row["name"] for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM resources WHERE id = ?;", (resource_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def add_resource(
-    db_path: str,
     name: str,
+    resource_type: str,
     capacity: int,
-    unit: str = "Units",
-    description: str = ""
+    location: str = "",
+    availability: str = "Available",
+    operating_cost: float = 0.0,
+    db_path: str = DEFAULT_DB_PATH
 ) -> Tuple[bool, str]:
-    """Validates and adds a new resource."""
-    name = name.strip()
-    unit = unit.strip() or "Units"
-    if not name:
-        return False, "Resource name cannot be empty."
-    if capacity < 0:
-        return False, "Capacity cannot be negative."
+    """Inserts a new campus resource with validation."""
+    clean_name = name.strip()
+    if not clean_name:
+        return False, "Resource name cannot be blank."
+    if capacity <= 0:
+        return False, "Resource capacity must be a positive integer."
+    if operating_cost < 0:
+        return False, "Operating cost cannot be negative."
 
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO resources (name, capacity, unit, description) VALUES (?, ?, ?, ?);",
-                (name, capacity, unit, description.strip())
-            )
+            cursor.execute("""
+                INSERT INTO resources (name, resource_type, capacity, location, availability, operating_cost)
+                VALUES (?, ?, ?, ?, ?, ?);
+            """, (clean_name, resource_type.strip(), capacity, location.strip(), availability.strip(), float(operating_cost)))
             conn.commit()
-            return True, f"Resource '{name}' added successfully."
+            return True, f"Resource '{clean_name}' created successfully."
     except sqlite3.IntegrityError:
-        return False, f"A resource with the name '{name}' already exists."
+        return False, f"A resource named '{clean_name}' already exists."
     except Exception as e:
         return False, f"Database error: {str(e)}"
 
 
 def update_resource(
-    db_path: str,
-    old_name: str,
-    new_name: str,
+    resource_id: int,
+    name: str,
+    resource_type: str,
     capacity: int,
-    unit: str,
-    description: str
+    location: str = "",
+    availability: str = "Available",
+    operating_cost: float = 0.0,
+    db_path: str = DEFAULT_DB_PATH
 ) -> Tuple[bool, str]:
-    """Updates an existing resource and cascades rename to activities."""
-    new_name = new_name.strip()
-    unit = unit.strip() or "Units"
-    if not new_name:
-        return False, "Resource name cannot be empty."
-    if capacity < 0:
-        return False, "Capacity cannot be negative."
+    """Updates an existing campus resource."""
+    clean_name = name.strip()
+    if not clean_name:
+        return False, "Resource name cannot be blank."
+    if capacity <= 0:
+        return False, "Resource capacity must be a positive integer."
+    if operating_cost < 0:
+        return False, "Operating cost cannot be negative."
 
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """UPDATE resources 
-                   SET name = ?, capacity = ?, unit = ?, description = ? 
-                   WHERE name = ?;""",
-                (new_name, capacity, unit, description.strip(), old_name)
-            )
+            cursor.execute("""
+                UPDATE resources
+                SET name = ?, resource_type = ?, capacity = ?, location = ?, availability = ?, operating_cost = ?
+                WHERE id = ?;
+            """, (clean_name, resource_type.strip(), capacity, location.strip(), availability.strip(), float(operating_cost), resource_id))
             if cursor.rowcount == 0:
-                return False, f"Resource '{old_name}' not found."
+                return False, "Resource not found."
             conn.commit()
-            return True, f"Resource '{new_name}' updated successfully."
+            return True, f"Resource '{clean_name}' updated successfully."
     except sqlite3.IntegrityError:
-        return False, f"Resource name '{new_name}' already exists."
+        return False, f"Another resource with name '{clean_name}' already exists."
     except Exception as e:
         return False, f"Database error: {str(e)}"
 
 
-def delete_resource(db_path: str, name: str) -> Tuple[bool, str]:
-    """Deletes a resource if no activities are linked to it."""
+def delete_resource(resource_id: int, db_path: str = DEFAULT_DB_PATH) -> Tuple[bool, str]:
+    """Deletes a campus resource by ID."""
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) AS cnt FROM activities WHERE resource_type = ?;", (name,))
-            linked_count = cursor.fetchone()["cnt"]
-            if linked_count > 0:
-                return False, f"Cannot delete '{name}' because {linked_count} academic activity(s) depend on it. Reassign or delete those activities first."
+            cursor.execute("SELECT name FROM resources WHERE id = ?;", (resource_id,))
+            row = cursor.fetchone()
+            if not row:
+                return False, "Resource not found."
+            name = row["name"]
 
-            cursor.execute("DELETE FROM resources WHERE name = ?;", (name,))
+            cursor.execute("DELETE FROM resources WHERE id = ?;", (resource_id,))
             conn.commit()
             return True, f"Resource '{name}' deleted successfully."
     except Exception as e:
-        return False, f"Database error: {str(e)}"
+        return False, f"Could not delete resource: {str(e)}"
 
 
-# ============================================================================
-# Activity Operations
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Activities CRUD
+# ---------------------------------------------------------------------------
 
 def get_activities(db_path: str = DEFAULT_DB_PATH, only_active: bool = False) -> List[Dict[str, Any]]:
-    """Retrieves activities, optionally filtering for only enabled ones."""
+    """Retrieves all academic activities, optionally filtering for only active ones."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
         if only_active:
             cursor.execute("SELECT * FROM activities WHERE is_active = 1 ORDER BY priority DESC, name ASC;")
         else:
-            cursor.execute("SELECT * FROM activities ORDER BY is_active DESC, priority DESC, name ASC;")
-        return [dict(row) for row in cursor.fetchall()]
+            cursor.execute("SELECT * FROM activities ORDER BY priority DESC, name ASC;")
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_activity_by_id(activity_id: int, db_path: str = DEFAULT_DB_PATH) -> Optional[Dict[str, Any]]:
+    """Retrieves an academic activity by primary key ID."""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM activities WHERE id = ?;", (activity_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def add_activity(
-    db_path: str,
     name: str,
-    resource_type: str,
-    demand: int,
+    department: str,
+    num_students: int,
+    duration_hours: float,
+    required_resource_type: str,
     priority: int,
-    cost_per_unit: float,
-    is_active: bool = True
+    budget: float,
+    preferred_day: str = "Monday",
+    preferred_time_slot: str = "09:00 - 11:00",
+    is_active: int = 1,
+    db_path: str = DEFAULT_DB_PATH
 ) -> Tuple[bool, str]:
-    """Validates and adds an academic activity."""
-    name = name.strip()
-    if not name:
-        return False, "Activity name cannot be empty."
-    if demand <= 0:
-        return False, "Resource demand must be a positive integer (> 0)."
-    if not (1 <= priority <= 5):
-        return False, "Priority must be an integer between 1 (Lowest) and 5 (Highest)."
-    if cost_per_unit < 0:
-        return False, "Cost per unit cannot be negative."
+    """Inserts a new academic activity with complete validation."""
+    clean_name = name.strip()
+    if not clean_name:
+        return False, "Activity name cannot be blank."
+    if num_students <= 0:
+        return False, "Number of students must be greater than zero."
+    if duration_hours <= 0:
+        return False, "Duration must be greater than zero."
+    if priority < 1 or priority > 5:
+        return False, "Priority must be between 1 (Low) and 5 (Critical)."
+    if budget < 0:
+        return False, "Budget cannot be negative."
 
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
-            # Verify resource exists
-            cursor.execute("SELECT id FROM resources WHERE name = ?;", (resource_type,))
-            if not cursor.fetchone():
-                return False, f"Resource type '{resource_type}' does not exist."
-
-            cursor.execute(
-                """INSERT INTO activities 
-                   (name, resource_type, demand, priority, cost_per_unit, is_active)
-                   VALUES (?, ?, ?, ?, ?, ?);""",
-                (name, resource_type, int(demand), int(priority), float(cost_per_unit), 1 if is_active else 0)
-            )
+            cursor.execute("""
+                INSERT INTO activities (
+                    name, department, num_students, duration_hours,
+                    required_resource_type, priority, budget,
+                    preferred_day, preferred_time_slot, is_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (
+                clean_name, department.strip(), int(num_students), float(duration_hours),
+                required_resource_type.strip(), int(priority), float(budget),
+                preferred_day.strip(), preferred_time_slot.strip(), 1 if is_active else 0
+            ))
             conn.commit()
-            return True, f"Activity '{name}' registered successfully."
+            return True, f"Activity '{clean_name}' created successfully."
     except sqlite3.IntegrityError:
-        return False, f"An activity with the name '{name}' already exists."
+        return False, f"An activity named '{clean_name}' already exists."
     except Exception as e:
         return False, f"Database error: {str(e)}"
 
 
 def update_activity(
-    db_path: str,
     activity_id: int,
     name: str,
-    resource_type: str,
-    demand: int,
+    department: str,
+    num_students: int,
+    duration_hours: float,
+    required_resource_type: str,
     priority: int,
-    cost_per_unit: float,
-    is_active: bool
+    budget: float,
+    preferred_day: str = "Monday",
+    preferred_time_slot: str = "09:00 - 11:00",
+    is_active: int = 1,
+    db_path: str = DEFAULT_DB_PATH
 ) -> Tuple[bool, str]:
-    """Updates an existing activity."""
-    name = name.strip()
-    if not name:
-        return False, "Activity name cannot be empty."
-    if demand <= 0:
-        return False, "Demand must be greater than zero."
-    if not (1 <= priority <= 5):
-        return False, "Priority must be between 1 and 5."
-    if cost_per_unit < 0:
-        return False, "Cost cannot be negative."
+    """Updates an existing academic activity with validation."""
+    clean_name = name.strip()
+    if not clean_name:
+        return False, "Activity name cannot be blank."
+    if num_students <= 0:
+        return False, "Number of students must be greater than zero."
+    if duration_hours <= 0:
+        return False, "Duration must be greater than zero."
+    if priority < 1 or priority > 5:
+        return False, "Priority must be between 1 (Low) and 5 (Critical)."
+    if budget < 0:
+        return False, "Budget cannot be negative."
 
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """UPDATE activities
-                   SET name = ?, resource_type = ?, demand = ?, priority = ?, 
-                       cost_per_unit = ?, is_active = ?
-                   WHERE id = ?;""",
-                (name, resource_type, int(demand), int(priority), float(cost_per_unit), 1 if is_active else 0, activity_id)
-            )
+            cursor.execute("""
+                UPDATE activities
+                SET name = ?, department = ?, num_students = ?, duration_hours = ?,
+                    required_resource_type = ?, priority = ?, budget = ?,
+                    preferred_day = ?, preferred_time_slot = ?, is_active = ?
+                WHERE id = ?;
+            """, (
+                clean_name, department.strip(), int(num_students), float(duration_hours),
+                required_resource_type.strip(), int(priority), float(budget),
+                preferred_day.strip(), preferred_time_slot.strip(), 1 if is_active else 0,
+                activity_id
+            ))
             if cursor.rowcount == 0:
                 return False, "Activity not found."
             conn.commit()
-            return True, f"Activity '{name}' updated successfully."
+            return True, f"Activity '{clean_name}' updated successfully."
     except sqlite3.IntegrityError:
-        return False, f"Another activity with the name '{name}' already exists."
+        return False, f"Another activity with name '{clean_name}' already exists."
     except Exception as e:
         return False, f"Database error: {str(e)}"
 
 
-def delete_activity(db_path: str, activity_id: int) -> Tuple[bool, str]:
-    """Deletes an activity by ID."""
+def delete_activity(activity_id: int, db_path: str = DEFAULT_DB_PATH) -> Tuple[bool, str]:
+    """Deletes an academic activity by ID."""
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM activities WHERE id = ?;", (activity_id,))
-            if cursor.rowcount == 0:
+            cursor.execute("SELECT name FROM activities WHERE id = ?;", (activity_id,))
+            row = cursor.fetchone()
+            if not row:
                 return False, "Activity not found."
+            name = row["name"]
+
+            cursor.execute("DELETE FROM activities WHERE id = ?;", (activity_id,))
             conn.commit()
-            return True, "Activity deleted successfully."
+            return True, f"Activity '{name}' deleted successfully."
     except Exception as e:
-        return False, f"Database error: {str(e)}"
+        return False, f"Could not delete activity: {str(e)}"
 
 
-def toggle_activity_status(db_path: str, activity_id: int) -> Tuple[bool, str]:
-    """Toggles active status of an activity between 0 and 1."""
+def toggle_activity_status(activity_id: int, db_path: str = DEFAULT_DB_PATH) -> Tuple[bool, str]:
+    """Toggles an activity between active (1) and inactive (0)."""
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT is_active, name FROM activities WHERE id = ?;", (activity_id,))
+            cursor.execute("SELECT name, is_active FROM activities WHERE id = ?;", (activity_id,))
             row = cursor.fetchone()
             if not row:
                 return False, "Activity not found."
             new_status = 0 if row["is_active"] == 1 else 1
+            status_str = "Active" if new_status == 1 else "Inactive"
             cursor.execute("UPDATE activities SET is_active = ? WHERE id = ?;", (new_status, activity_id))
             conn.commit()
-            status_text = "enabled" if new_status == 1 else "disabled"
-            return True, f"Activity '{row['name']}' is now {status_text}."
+            return True, f"Activity '{row['name']}' set to {status_str}."
     except Exception as e:
-        return False, f"Database error: {str(e)}"
+        return False, f"Could not toggle status: {str(e)}"
 
 
-# ============================================================================
-# Optimization History Operations
-# ============================================================================
+# ---------------------------------------------------------------------------
+# Optimization Runs & Allocations Persistence
+# ---------------------------------------------------------------------------
 
 def save_optimization_run(
-    db_path: str,
-    metadata: Dict[str, Any],
-    allocations: List[Dict[str, Any]],
-    convergence_history: List[Dict[str, Any]]
+    run_meta: Dict[str, Any],
+    allocations_list: List[Dict[str, Any]],
+    db_path: str = DEFAULT_DB_PATH
 ) -> int:
     """
-    Saves an optimization run and its per-activity allocations inside a safe transaction.
-    Returns the generated run_id.
+    Persists a complete Genetic Algorithm optimization run and all individual allocations
+    within an ACID-compliant transaction. Returns the newly created run_id.
     """
+    timestamp = run_meta.get("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    convergence_json = json.dumps(run_meta.get("convergence_history", []))
+
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-
-        cursor.execute(
-            """INSERT INTO optimization_runs (
+        cursor.execute("""
+            INSERT INTO optimization_runs (
                 timestamp, population_size, generations, mutation_rate, crossover_rate,
-                budget_limit, random_seed, best_fitness, total_demand, total_allocated,
-                demand_satisfaction_pct, budget_spent, budget_utilization_pct,
-                resource_utilization_pct, execution_time_sec, convergence_history_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);""",
-            (
-                metadata.get("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-                metadata["population_size"],
-                metadata["generations"],
-                metadata["mutation_rate"],
-                metadata["crossover_rate"],
-                metadata["budget_limit"],
-                metadata.get("random_seed"),
-                metadata["best_fitness"],
-                metadata["total_demand"],
-                metadata["total_allocated"],
-                metadata["demand_satisfaction_pct"],
-                metadata["budget_spent"],
-                metadata["budget_utilization_pct"],
-                metadata["resource_utilization_pct"],
-                metadata["execution_time_sec"],
-                json.dumps(convergence_history)
-            )
-        )
+                elitism_count, tournament_size, random_seed, best_fitness, total_activities,
+                allocated_activities, unallocated_activities, resource_utilization_pct,
+                total_cost, hard_violations, soft_violations, execution_time_sec, status,
+                convergence_json, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, (
+            timestamp,
+            int(run_meta.get("population_size", 50)),
+            int(run_meta.get("generations", 40)),
+            float(run_meta.get("mutation_rate", 0.15)),
+            float(run_meta.get("crossover_rate", 0.85)),
+            int(run_meta.get("elitism_count", 2)),
+            int(run_meta.get("tournament_size", 3)),
+            run_meta.get("random_seed"),
+            float(run_meta.get("best_fitness", 0.0)),
+            int(run_meta.get("total_activities", len(allocations_list))),
+            int(run_meta.get("allocated_activities", 0)),
+            int(run_meta.get("unallocated_activities", 0)),
+            float(run_meta.get("resource_utilization_pct", 0.0)),
+            float(run_meta.get("total_cost", 0.0)),
+            int(run_meta.get("hard_violations", 0)),
+            int(run_meta.get("soft_violations", 0)),
+            float(run_meta.get("execution_time_sec", 0.0)),
+            str(run_meta.get("status", "Completed")),
+            convergence_json,
+            str(run_meta.get("notes", ""))
+        ))
         run_id = cursor.lastrowid
 
-        allocation_rows = [
-            (
+        # Insert detailed allocations
+        alloc_records = []
+        for alloc in allocations_list:
+            alloc_records.append((
                 run_id,
-                item["name"],
-                item["resource_type"],
-                item["priority"],
-                item["demand"],
-                item["allocated"],
-                item["unmet"],
-                item["satisfaction_pct"],
-                item["cost_per_unit"],
-                item["total_cost"]
-            )
-            for item in allocations
-        ]
+                int(alloc.get("activity_id", 0)),
+                str(alloc.get("activity_name", "")),
+                str(alloc.get("department", "")),
+                int(alloc.get("num_students", 0)),
+                int(alloc.get("priority", 1)),
+                alloc.get("resource_id"),
+                alloc.get("resource_name"),
+                alloc.get("resource_type"),
+                alloc.get("resource_capacity"),
+                alloc.get("day"),
+                alloc.get("time_slot"),
+                float(alloc.get("cost", 0.0)),
+                str(alloc.get("status", "Unallocated")),
+                str(alloc.get("violations", ""))
+            ))
 
-        cursor.executemany(
-            """INSERT INTO run_allocations (
-                run_id, activity_name, resource_type, priority, demand,
-                allocated, unmet, satisfaction_pct, cost_per_unit, total_cost
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);""",
-            allocation_rows
-        )
+        cursor.executemany("""
+            INSERT INTO allocations (
+                run_id, activity_id, activity_name, department, num_students, priority,
+                resource_id, resource_name, resource_type, resource_capacity,
+                day, time_slot, cost, status, violations
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        """, alloc_records)
 
         conn.commit()
         return run_id
 
 
-def get_optimization_runs(db_path: str = DEFAULT_DB_PATH, limit: int = 50) -> List[Dict[str, Any]]:
-    """Returns recent optimization runs."""
+def get_optimization_runs(db_path: str = DEFAULT_DB_PATH, limit: int = 25) -> List[Dict[str, Any]]:
+    """Retrieves historical optimization runs ordered by latest first."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM optimization_runs ORDER BY id DESC LIMIT ?;",
-            (limit,)
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM optimization_runs ORDER BY id DESC LIMIT ?;", (limit,))
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            d = dict(row)
+            if d.get("convergence_json"):
+                try:
+                    d["convergence_history"] = json.loads(d["convergence_json"])
+                except Exception:
+                    d["convergence_history"] = []
+            else:
+                d["convergence_history"] = []
+            result.append(d)
+        return result
 
 
-def get_run_details(db_path: str, run_id: int) -> Optional[Dict[str, Any]]:
-    """Returns complete details of a specific optimization run including allocations."""
+def get_run_by_id(run_id: int, db_path: str = DEFAULT_DB_PATH) -> Optional[Dict[str, Any]]:
+    """Retrieves a single optimization run by ID with parsed convergence history."""
     with get_connection(db_path) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM optimization_runs WHERE id = ?;", (run_id,))
-        run_row = cursor.fetchone()
-        if not run_row:
+        row = cursor.fetchone()
+        if not row:
             return None
-
-        run_dict = dict(run_row)
-        if run_dict.get("convergence_history_json"):
+        d = dict(row)
+        if d.get("convergence_json"):
             try:
-                run_dict["convergence_history"] = json.loads(run_dict["convergence_history_json"])
+                d["convergence_history"] = json.loads(d["convergence_json"])
             except Exception:
-                run_dict["convergence_history"] = []
+                d["convergence_history"] = []
         else:
-            run_dict["convergence_history"] = []
-
-        cursor.execute(
-            "SELECT * FROM run_allocations WHERE run_id = ? ORDER BY priority DESC, activity_name ASC;",
-            (run_id,)
-        )
-        run_dict["allocations"] = [dict(row) for row in cursor.fetchall()]
-        return run_dict
+            d["convergence_history"] = []
+        return d
 
 
-def clear_history(db_path: str = DEFAULT_DB_PATH) -> Tuple[bool, str]:
-    """Deletes all stored optimization runs and detailed allocations."""
+def get_run_allocations(run_id: int, db_path: str = DEFAULT_DB_PATH) -> List[Dict[str, Any]]:
+    """Retrieves all allocations belonging to a specific run ID."""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM allocations WHERE run_id = ? ORDER BY priority DESC, activity_name ASC;", (run_id,))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def delete_optimization_run(run_id: int, db_path: str = DEFAULT_DB_PATH) -> Tuple[bool, str]:
+    """Deletes an optimization run and cascading allocations."""
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM run_allocations;")
-            cursor.execute("DELETE FROM optimization_runs;")
+            cursor.execute("DELETE FROM optimization_runs WHERE id = ?;", (run_id,))
             conn.commit()
-            return True, "Optimization history cleared successfully."
+            return True, f"Optimization run #{run_id} deleted."
     except Exception as e:
-        return False, f"Failed to clear history: {str(e)}"
+        return False, f"Could not delete run: {str(e)}"
+
+
+def get_dashboard_stats(db_path: str = DEFAULT_DB_PATH) -> Dict[str, Any]:
+    """Calculates summary KPIs and statistics across resources, activities, and runs."""
+    with get_connection(db_path) as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) FROM activities;")
+        total_activities = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM activities WHERE is_active = 1;")
+        active_activities = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM resources;")
+        total_resources = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM resources WHERE resource_type = 'Classroom' AND availability = 'Available';")
+        avail_classrooms = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM resources WHERE resource_type = 'Laboratory' AND availability = 'Available';")
+        avail_labs = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COALESCE(SUM(capacity), 0) FROM resources WHERE availability = 'Available';")
+        total_capacity = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM optimization_runs;")
+        total_runs = cursor.fetchone()[0]
+
+        cursor.execute("SELECT * FROM optimization_runs ORDER BY id DESC LIMIT 1;")
+        latest_run_row = cursor.fetchone()
+        latest_run = dict(latest_run_row) if latest_run_row else None
+
+        cursor.execute("SELECT * FROM optimization_runs ORDER BY id DESC LIMIT 5;")
+        recent_runs = [dict(r) for r in cursor.fetchall()]
+
+        # Resource distribution by type
+        cursor.execute("SELECT resource_type, COUNT(*) as count, SUM(capacity) as total_cap FROM resources GROUP BY resource_type;")
+        resource_breakdown = [dict(r) for r in cursor.fetchall()]
+
+        # Activity priority distribution
+        cursor.execute("SELECT priority, COUNT(*) as count FROM activities GROUP BY priority ORDER BY priority DESC;")
+        priority_breakdown = [dict(r) for r in cursor.fetchall()]
+
+        return {
+            "total_activities": total_activities,
+            "active_activities": active_activities,
+            "total_resources": total_resources,
+            "available_classrooms": avail_classrooms,
+            "available_labs": avail_labs,
+            "total_capacity": total_capacity,
+            "total_runs": total_runs,
+            "latest_run": latest_run,
+            "recent_runs": recent_runs,
+            "resource_breakdown": resource_breakdown,
+            "priority_breakdown": priority_breakdown
+        }

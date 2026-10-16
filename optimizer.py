@@ -1,8 +1,10 @@
 """
 Genetic Algorithm Optimizer for Smart Campus Resource Allocation.
-Developed by Team EvoNex.
-Provides a pure Python/NumPy implementation of an Evolutionary Algorithm designed
-to optimize multi-resource campus capacity and budget allocation with priority weighting.
+Developed by Team EvoCampus.
+Tagline: "Evolving Intelligence, Optimizing Tomorrow."
+
+A genuine, pure-Python Evolutionary Algorithm that solves the multi-constrained
+campus resource scheduling problem (classrooms, labs, seminar halls, equipment, and time slots).
 """
 
 import time
@@ -10,260 +12,416 @@ import random
 from typing import List, Dict, Any, Tuple, Optional
 import numpy as np
 
-
-# Priority weights: exponential reward for critical academic activities
+# Priority weighting map: exponential scaling for critical academic events
 PRIORITY_WEIGHTS = {
-    1: 1.0,   # Low priority (e.g. general elective club session)
-    2: 2.0,   # Medium-Low (e.g. guest seminar)
-    3: 4.0,   # Medium (e.g. regular tutorial/review)
-    4: 7.0,   # High (e.g. core laboratory session)
-    5: 11.0   # Critical (e.g. final examination, accredited lab, capstone)
+    1: 1.0,   # Low priority (e.g. elective club meet)
+    2: 2.0,   # Medium-Low (e.g. review session)
+    3: 4.0,   # Medium (e.g. general tutorial)
+    4: 7.0,   # High (e.g. core laboratory / major lecture)
+    5: 11.0   # Critical (e.g. capstone defense / final examination)
 }
+
+# Standard university academic time slot pool
+DEFAULT_TIME_SLOTS = [
+    "Monday 09:00 - 11:00",
+    "Monday 11:00 - 13:00",
+    "Monday 14:00 - 16:00",
+    "Tuesday 09:00 - 11:00",
+    "Tuesday 11:00 - 13:00",
+    "Tuesday 14:00 - 16:00",
+    "Wednesday 09:00 - 11:00",
+    "Wednesday 11:00 - 13:00",
+    "Wednesday 14:00 - 16:00",
+    "Thursday 09:00 - 11:00",
+    "Thursday 11:00 - 13:00",
+    "Thursday 14:00 - 16:00",
+    "Friday 09:00 - 11:00",
+    "Friday 11:00 - 13:00",
+    "Friday 15:00 - 17:00"
+]
 
 
 class GeneticAlgorithmOptimizer:
     """
-    Scratch-implemented Genetic Algorithm for campus resource scheduling & allocation.
-    Solves a multi-dimensional knapsack-like constrained optimization problem.
+    Genuine Genetic Algorithm for university multi-resource and time-slot scheduling.
+    Solves constraints across capacity, facility type matching, time collisions, and budgets.
     """
 
     def __init__(
         self,
         activities: List[Dict[str, Any]],
-        resource_capacities: Dict[str, int],
-        budget_limit: float,
-        population_size: int = 60,
-        generations: int = 50,
+        resources: List[Dict[str, Any]],
+        population_size: int = 50,
+        generations: int = 40,
+        mutation_rate: float = 0.15,
         crossover_rate: float = 0.85,
-        mutation_rate: float = 0.10,
-        tournament_size: int = 3,
         elitism_count: int = 2,
-        random_seed: Optional[int] = None
+        tournament_size: int = 3,
+        random_seed: Optional[int] = None,
+        time_slots: Optional[List[str]] = None
     ):
-        """
-        Initializes the Genetic Algorithm parameters and problem space.
-        """
+        # Filter for active activities
         self.activities = [act for act in activities if act.get("is_active", 1) == 1]
         self.num_activities = len(self.activities)
-        self.resource_capacities = dict(resource_capacities)
-        self.budget_limit = float(budget_limit)
+        self.resources = list(resources)
+        self.num_resources = len(self.resources)
+        self.time_slots = time_slots if time_slots else DEFAULT_TIME_SLOTS
 
+        # Hyperparameters
         self.population_size = max(10, int(population_size))
         self.generations = max(5, int(generations))
-        self.crossover_rate = min(1.0, max(0.0, float(crossover_rate)))
         self.mutation_rate = min(1.0, max(0.0, float(mutation_rate)))
-        self.tournament_size = max(2, min(self.population_size, int(tournament_size)))
+        self.crossover_rate = min(1.0, max(0.0, float(crossover_rate)))
         self.elitism_count = max(1, min(self.population_size // 2, int(elitism_count)))
+        self.tournament_size = max(2, min(self.population_size, int(tournament_size)))
         self.random_seed = random_seed
 
         if self.random_seed is not None:
             random.seed(self.random_seed)
             np.random.seed(self.random_seed)
 
-        # Pre-extract vector bounds and attributes for high performance
-        self.demands = [int(act["demand"]) for act in self.activities]
-        self.priorities = [int(act["priority"]) for act in self.activities]
-        self.costs = [float(act["cost_per_unit"]) for act in self.activities]
-        self.resource_types = [str(act["resource_type"]) for act in self.activities]
-        self.names = [str(act["name"]) for act in self.activities]
+        # Lookup maps for rapid gene evaluation
+        self.resource_by_id = {r["id"]: r for r in self.resources}
+        self.compatible_resources_by_type = {}
+        for r in self.resources:
+            rtype = r.get("resource_type", "")
+            if rtype not in self.compatible_resources_by_type:
+                self.compatible_resources_by_type[rtype] = []
+            self.compatible_resources_by_type[rtype].append(r["id"])
 
-        # Total maximum possible priority sum for normalization
-        self.total_priority_weight = sum(
-            PRIORITY_WEIGHTS.get(p, 1.0) for p in self.priorities
-        ) if self.num_activities > 0 else 1.0
+    def _get_preferred_slot(self, activity: Dict[str, Any]) -> str:
+        """Constructs preferred day + slot string or falls back to first standard slot."""
+        day = activity.get("preferred_day", "Monday")
+        slot = activity.get("preferred_time_slot", "09:00 - 11:00")
+        combined = f"{day} {slot}"
+        for s in self.time_slots:
+            if day.lower() in s.lower() and slot.split("-")[0].strip() in s:
+                return s
+        return combined if combined in self.time_slots else self.time_slots[0]
 
-    # -------------------------------------------------------------------------
-    # Constraint Enforcement and Solution Repair
-    # -------------------------------------------------------------------------
-
-    def repair_chromosome(self, chromosome: List[int]) -> List[int]:
+    def _create_heuristic_individual(self) -> List[Tuple[int, str]]:
         """
-        Enforces physical campus constraints on a candidate solution:
-        1. Clamps allocation to [0, demand_i] for each activity.
-        2. Enforces resource capacity limits per resource type (trims lowest priority first).
-        3. Enforces total monetary budget limit (trims lowest priority / highest cost first).
-        Guarantees that returned solutions are 100% feasible.
+        Creates a heuristic seed individual by sorting activities by priority
+        and greedily assigning best-fit compatible resources without time collisions.
         """
-        if self.num_activities == 0:
-            return []
+        chromosome = [(0, self.time_slots[0])] * self.num_activities
+        sorted_indices = sorted(
+            range(self.num_activities),
+            key=lambda i: (self.activities[i].get("priority", 1), self.activities[i].get("num_students", 0)),
+            reverse=True
+        )
 
-        # Step 1: Demand Bounds Clamping
-        repaired = [
-            max(0, min(self.demands[i], int(chromosome[i])))
-            for i in range(self.num_activities)
-        ]
+        occupied_schedule = set()  # set of (resource_id, time_slot)
 
-        # Step 2: Resource Capacity Enforcement
-        # Group activity indices by resource type
-        res_to_indices: Dict[str, List[int]] = {}
-        for idx, res_name in enumerate(self.resource_types):
-            res_to_indices.setdefault(res_name, []).append(idx)
+        for idx in sorted_indices:
+            act = self.activities[idx]
+            req_type = act.get("required_resource_type", "")
+            students = act.get("num_students", 0)
+            preferred_slot = self._get_preferred_slot(act)
 
-        for res_name, indices in res_to_indices.items():
-            cap = self.resource_capacities.get(res_name, 0)
-            current_total = sum(repaired[i] for i in indices)
+            # Find matching resources with sufficient capacity
+            compatible_ids = self.compatible_resources_by_type.get(req_type, [])
+            valid_candidates = [
+                self.resource_by_id[rid] for rid in compatible_ids
+                if self.resource_by_id[rid].get("capacity", 0) >= students
+                and self.resource_by_id[rid].get("availability", "Available") == "Available"
+            ]
 
-            if current_total > cap:
-                excess = current_total - cap
-                # Sort indices by ascending priority, then descending cost (trim least critical first)
-                sorted_indices = sorted(
-                    indices,
-                    key=lambda idx: (self.priorities[idx], -self.costs[idx])
-                )
-                for idx in sorted_indices:
-                    if excess <= 0:
-                        break
-                    reduce_by = min(repaired[idx], excess)
-                    repaired[idx] -= reduce_by
-                    excess -= reduce_by
+            # Sort by tightest capacity fit (minimizing wasted seats)
+            valid_candidates.sort(key=lambda r: r.get("capacity", 0) - students)
 
-        # Step 3: Budget Constraint Enforcement
-        current_cost = sum(repaired[i] * self.costs[i] for i in range(self.num_activities))
-        if current_cost > self.budget_limit:
-            # Sort non-zero allocations by ascending priority, then descending unit cost
-            active_indices = [i for i in range(self.num_activities) if repaired[i] > 0]
-            sorted_indices = sorted(
-                active_indices,
-                key=lambda idx: (self.priorities[idx], -self.costs[idx])
-            )
-
-            for idx in sorted_indices:
-                if current_cost <= self.budget_limit:
+            assigned = False
+            # Try preferred slot first
+            for res in valid_candidates:
+                key = (res["id"], preferred_slot)
+                if key not in occupied_schedule:
+                    chromosome[idx] = (res["id"], preferred_slot)
+                    occupied_schedule.add(key)
+                    assigned = True
                     break
-                unit_cost = self.costs[idx]
-                if unit_cost <= 0:
-                    continue
-                needed_reduction = current_cost - self.budget_limit
-                units_to_cut = int(np.ceil(needed_reduction / unit_cost))
-                actual_cut = min(repaired[idx], units_to_cut)
-                repaired[idx] -= actual_cut
-                current_cost -= actual_cut * unit_cost
 
-        return repaired
+            # Try other slots if preferred slot was taken
+            if not assigned:
+                for slot in self.time_slots:
+                    for res in valid_candidates:
+                        key = (res["id"], slot)
+                        if key not in occupied_schedule:
+                            chromosome[idx] = (res["id"], slot)
+                            occupied_schedule.add(key)
+                            assigned = True
+                            break
+                    if assigned:
+                        break
 
-    # -------------------------------------------------------------------------
-    # Fitness Function
-    # -------------------------------------------------------------------------
+            # Fallback if overconstrained
+            if not assigned and self.resources:
+                fallback_res = valid_candidates[0] if valid_candidates else random.choice(self.resources)
+                chromosome[idx] = (fallback_res["id"], preferred_slot)
 
-    def calculate_fitness(self, chromosome: List[int]) -> float:
-        """
-        Computes the fitness score of a candidate allocation.
-        Objective:
-        - Maximize priority-weighted demand fulfillment (0 - 100 points).
-        - Secondary incentive: efficient resource capacity utilization (up to 10 points).
-        - Penalty for any constraint violation (safety check, 0 with repair).
-        """
-        if self.num_activities == 0:
-            return 0.0
+        return chromosome
 
-        # Check raw constraints for penalties if un-repaired
-        penalty = 0.0
+    def _create_random_individual(self) -> List[Tuple[int, str]]:
+        """Generates a stochastic chromosome with semi-biased matching to valid types."""
+        chromosome = []
+        for act in self.activities:
+            req_type = act.get("required_resource_type", "")
+            compatible_ids = self.compatible_resources_by_type.get(req_type, [])
 
-        # Check resource capacities
-        res_usage: Dict[str, int] = {}
-        total_cost = 0.0
-        for i in range(self.num_activities):
-            alloc = chromosome[i]
-            if alloc < 0 or alloc > self.demands[i]:
-                penalty += 100.0 * abs(alloc - max(0, min(alloc, self.demands[i])))
-            res_usage[self.resource_types[i]] = res_usage.get(self.resource_types[i], 0) + alloc
-            total_cost += alloc * self.costs[i]
+            # 75% chance to pick compatible resource type, 25% random exploration
+            if compatible_ids and random.random() < 0.75:
+                rid = random.choice(compatible_ids)
+            elif self.resources:
+                rid = random.choice(self.resources)["id"]
+            else:
+                rid = 0
 
-        for res, usage in res_usage.items():
-            cap = self.resource_capacities.get(res, 0)
-            if usage > cap:
-                penalty += 200.0 * (usage - cap)
+            # 50% chance to pick preferred time slot, 50% random slot
+            if random.random() < 0.50:
+                slot = self._get_preferred_slot(act)
+            else:
+                slot = random.choice(self.time_slots)
 
-        if total_cost > self.budget_limit:
-            penalty += 150.0 * ((total_cost - self.budget_limit) / max(1.0, self.budget_limit))
+            chromosome.append((rid, slot))
+        return chromosome
 
-        # Priority-weighted satisfaction score (0 to 100)
-        weighted_fulfillment_sum = 0.0
-        for i in range(self.num_activities):
-            demand = self.demands[i]
-            alloc = chromosome[i]
-            ratio = (alloc / demand) if demand > 0 else 0.0
-            ratio = max(0.0, min(1.0, ratio))
-            weight = PRIORITY_WEIGHTS.get(self.priorities[i], 1.0)
-            weighted_fulfillment_sum += weight * ratio
-
-        priority_score = (weighted_fulfillment_sum / self.total_priority_weight) * 100.0
-
-        # Resource utilization bonus: Encourages active scheduling without exceeding caps
-        total_capacity = sum(self.resource_capacities.values())
-        total_allocated = sum(chromosome)
-        utilization_ratio = (total_allocated / total_capacity) if total_capacity > 0 else 0.0
-        utilization_bonus = min(1.0, max(0.0, utilization_ratio)) * 5.0
-
-        fitness = priority_score + utilization_bonus - penalty
-        return max(0.0, round(fitness, 4))
-
-    # -------------------------------------------------------------------------
-    # Initial Population
-    # -------------------------------------------------------------------------
-
-    def create_initial_population(self) -> List[List[int]]:
-        """
-        Creates a diverse initial population combining:
-        1. Greedy priority heuristic (fill highest priority activities first).
-        2. Proportional heuristic (scale demand to average resource capacity).
-        3. Random candidates spanning sparse to dense allocations.
-        All candidates are repaired to strictly guarantee feasibility.
-        """
-        population: List[List[int]] = []
-
-        if self.num_activities == 0:
+    def _initialize_population(self) -> List[List[Tuple[int, str]]]:
+        """Initializes population using heuristic seeds and stochastic exploration."""
+        population = []
+        if self.num_activities == 0 or self.num_resources == 0:
             return population
 
-        # Heuristic 1: Greedy Priority Allocation
-        greedy_cand = [0] * self.num_activities
-        sorted_by_priority = sorted(
-            range(self.num_activities),
-            key=lambda i: (-self.priorities[i], self.costs[i])
-        )
-        for idx in sorted_by_priority:
-            greedy_cand[idx] = self.demands[idx]
-        population.append(self.repair_chromosome(greedy_cand))
+        # Seed 1 & 2: Heuristic greedy individuals
+        population.append(self._create_heuristic_individual())
+        if self.population_size > 1:
+            population.append(self._create_heuristic_individual())
 
-        # Heuristic 2: Proportional Allocation (50% demand)
-        prop_cand = [self.demands[i] // 2 for i in range(self.num_activities)]
-        population.append(self.repair_chromosome(prop_cand))
-
-        # Heuristic 3: 75% Allocation
-        high_cand = [int(self.demands[i] * 0.75) for i in range(self.num_activities)]
-        population.append(self.repair_chromosome(high_cand))
-
-        # Heuristic 4: Zero Allocation (Safe fallback)
-        zero_cand = [0] * self.num_activities
-        population.append(self.repair_chromosome(zero_cand))
-
-        # Fill remaining with randomized chromosomes
+        # Seed remaining individuals stochastically
         while len(population) < self.population_size:
-            random_cand = [
-                random.randint(0, self.demands[i])
-                for i in range(self.num_activities)
-            ]
-            population.append(self.repair_chromosome(random_cand))
+            population.append(self._create_random_individual())
 
         return population
 
-    # -------------------------------------------------------------------------
-    # Selection, Crossover, and Mutation Operators
-    # -------------------------------------------------------------------------
+    def evaluate_chromosome(self, chromosome: List[Tuple[int, str]]) -> Tuple[float, Dict[str, Any]]:
+        """
+        Calculates fitness and constraint statistics for a candidate chromosome.
+        Hard constraints strictly penalize violations.
+        Soft constraints reward priority satisfaction, utilization, and budget control.
+        """
+        if not chromosome or self.num_activities == 0:
+            return 0.0, {
+                "hard_violations": 0,
+                "soft_violations": 0,
+                "allocated_count": 0,
+                "total_cost": 0.0,
+                "utilization_pct": 0.0,
+                "violation_details": []
+            }
 
-    def tournament_selection(self, population: List[List[int]], fitnesses: List[float]) -> List[int]:
+        hard_penalty = 0.0
+        soft_score = 0.0
+        hard_violations = 0
+        soft_violations = 0
+        allocated_count = 0
+        total_cost = 0.0
+        utilized_capacity = 0
+        total_assigned_capacity = 0
+        violation_details = []
+
+        # Schedule occupancy map: (resource_id, time_slot) -> list of activity indices
+        occupied_schedule: Dict[Tuple[int, str], List[int]] = {}
+
+        for i, (rid, slot) in enumerate(chromosome):
+            act = self.activities[i]
+            res = self.resource_by_id.get(rid)
+
+            if not res:
+                hard_penalty += 800.0
+                hard_violations += 1
+                violation_details.append(f"Activity '{act['name']}': assigned to non-existent resource ID {rid}.")
+                continue
+
+            # Hard Constraint 1: Resource Type Compatibility
+            req_type = act.get("required_resource_type", "")
+            actual_type = res.get("resource_type", "")
+            if actual_type != req_type:
+                hard_penalty += 500.0
+                hard_violations += 1
+                violation_details.append(f"Type Mismatch: '{act['name']}' requires '{req_type}' but assigned to '{actual_type}' ({res['name']}).")
+
+            # Hard Constraint 2: Resource Availability
+            avail = res.get("availability", "Available")
+            if avail != "Available":
+                hard_penalty += 400.0
+                hard_violations += 1
+                violation_details.append(f"Availability Issue: '{res['name']}' is '{avail}' (not Available).")
+
+            # Hard Constraint 3: Capacity Sufficiency
+            cap = res.get("capacity", 0)
+            students = act.get("num_students", 0)
+            if cap < students:
+                deficit = students - cap
+                hard_penalty += 350.0 + (deficit * 10.0)
+                hard_violations += 1
+                violation_details.append(f"Capacity Exceeded: '{act['name']}' has {students} students but '{res['name']}' capacity is {cap}.")
+            else:
+                utilized_capacity += students
+                total_assigned_capacity += cap
+
+            # Track time collisions
+            schedule_key = (rid, slot)
+            if schedule_key not in occupied_schedule:
+                occupied_schedule[schedule_key] = []
+            occupied_schedule[schedule_key].append(i)
+
+            # Soft Objective 1: Priority-Weighted Satisfaction
+            priority = act.get("priority", 1)
+            weight = PRIORITY_WEIGHTS.get(priority, 1.0)
+            soft_score += weight * 40.0
+
+            # Soft Objective 2: Capacity Utilization Efficiency (Reward snug fit, penalize huge empty space)
+            if cap >= students and cap > 0:
+                fit_ratio = students / cap
+                soft_score += fit_ratio * 25.0
+
+            # Soft Objective 3: Preferred Time Slot Bonus
+            preferred_slot = self._get_preferred_slot(act)
+            if slot == preferred_slot:
+                soft_score += 15.0
+
+            # Operating cost calculation
+            duration = act.get("duration_hours", 1.0)
+            unit_cost = res.get("operating_cost", 0.0)
+            act_cost = duration * unit_cost
+            total_cost += act_cost
+
+            # Soft Objective 4: Activity Budget Compliance
+            budget = act.get("budget", 0.0)
+            if budget > 0:
+                if act_cost <= budget:
+                    soft_score += 10.0
+                else:
+                    overage = act_cost - budget
+                    soft_score -= (overage * 0.5)
+                    soft_violations += 1
+                    violation_details.append(f"Budget Exceeded: '{act['name']}' cost ${act_cost:.2f} exceeds budget ${budget:.2f}.")
+
+        # Hard Constraint 4: Collision / Double-Booking Enforcement
+        for (rid, slot), acts in occupied_schedule.items():
+            if len(acts) > 1:
+                res_name = self.resource_by_id.get(rid, {}).get("name", f"Resource #{rid}")
+                collision_count = len(acts) - 1
+                hard_penalty += 450.0 * collision_count
+                hard_violations += collision_count
+                colliding_names = [self.activities[idx]["name"] for idx in acts]
+                violation_details.append(f"Scheduling Collision: {len(acts)} activities ({', '.join(colliding_names)}) double-booked in '{res_name}' at '{slot}'.")
+
+        # Total overall fitness
+        # Base constant of 1000 so positive numbers are maintained when feasible
+        fitness = 1000.0 + soft_score - hard_penalty
+
+        # Utilization calculation
+        utilization_pct = 0.0
+        if total_assigned_capacity > 0:
+            utilization_pct = min(100.0, round((utilized_capacity / total_assigned_capacity) * 100.0, 1))
+
+        # Successfully allocated count (activities without hard constraint violations)
+        allocated_count = max(0, self.num_activities - hard_violations)
+
+        stats = {
+            "hard_violations": hard_violations,
+            "soft_violations": soft_violations,
+            "allocated_count": allocated_count,
+            "total_cost": round(total_cost, 2),
+            "utilization_pct": utilization_pct,
+            "violation_details": violation_details
+        }
+        return fitness, stats
+
+    def _repair_chromosome(self, chromosome: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
         """
-        Tournament selection: Selects k random individuals and returns the best.
+        Feasibility repair operator:
+        Detects collisions and invalid capacities, attempting to shift activities
+        to unoccupied, compatible resources and alternative time slots.
         """
-        indices = random.sample(range(len(population)), self.tournament_size)
-        best_idx = max(indices, key=lambda idx: fitnesses[idx])
+        repaired = list(chromosome)
+        occupied = set()
+
+        # Sort activities by priority descending to protect high priority assignments
+        sorted_indices = sorted(
+            range(self.num_activities),
+            key=lambda i: self.activities[i].get("priority", 1),
+            reverse=True
+        )
+
+        for idx in sorted_indices:
+            rid, slot = repaired[idx]
+            act = self.activities[idx]
+            res = self.resource_by_id.get(rid)
+            req_type = act.get("required_resource_type", "")
+            students = act.get("num_students", 0)
+
+            is_valid = (
+                res is not None
+                and res.get("resource_type") == req_type
+                and res.get("capacity", 0) >= students
+                and res.get("availability") == "Available"
+                and (rid, slot) not in occupied
+            )
+
+            if is_valid:
+                occupied.add((rid, slot))
+                continue
+
+            # Need repair: Search for an unoccupied compatible alternative
+            compatible_ids = self.compatible_resources_by_type.get(req_type, [])
+            valid_resources = [
+                self.resource_by_id[r_id] for r_id in compatible_ids
+                if self.resource_by_id[r_id].get("capacity", 0) >= students
+                and self.resource_by_id[r_id].get("availability", "Available") == "Available"
+            ]
+            valid_resources.sort(key=lambda r: r.get("capacity", 0) - students)
+
+            found = False
+            # Check preferred slot first
+            preferred_slot = self._get_preferred_slot(act)
+            for cand in valid_resources:
+                if (cand["id"], preferred_slot) not in occupied:
+                    repaired[idx] = (cand["id"], preferred_slot)
+                    occupied.add((cand["id"], preferred_slot))
+                    found = True
+                    break
+
+            if not found:
+                # Check all other slots
+                for test_slot in self.time_slots:
+                    for cand in valid_resources:
+                        if (cand["id"], test_slot) not in occupied:
+                            repaired[idx] = (cand["id"], test_slot)
+                            occupied.add((cand["id"], test_slot))
+                            found = True
+                            break
+                    if found:
+                        break
+
+            if not found:
+                # Keep original and let fitness penalize
+                occupied.add((rid, slot))
+
+        return repaired
+
+    def _tournament_selection(self, population: List[List[Tuple[int, str]]], fitnesses: List[float]) -> List[Tuple[int, str]]:
+        """Samples k random candidates and selects the fittest individual."""
+        selected_indices = random.sample(range(len(population)), self.tournament_size)
+        best_idx = max(selected_indices, key=lambda idx: fitnesses[idx])
         return list(population[best_idx])
 
-    def crossover(self, parent1: List[int], parent2: List[int]) -> Tuple[List[int], List[int]]:
-        """
-        Single-point crossover with probability crossover_rate.
-        """
-        if self.num_activities < 2 or random.random() > self.crossover_rate:
+    def _crossover(
+        self,
+        parent1: List[Tuple[int, str]],
+        parent2: List[Tuple[int, str]]
+    ) -> Tuple[List[Tuple[int, str]], List[Tuple[int, str]]]:
+        """Single-point crossover combining chromosome sub-vectors."""
+        if random.random() > self.crossover_rate or self.num_activities < 2:
             return list(parent1), list(parent2)
 
         point = random.randint(1, self.num_activities - 1)
@@ -271,217 +429,208 @@ class GeneticAlgorithmOptimizer:
         child2 = parent2[:point] + parent1[point:]
         return child1, child2
 
-    def mutate(self, chromosome: List[int]) -> List[int]:
-        """
-        Gene-wise mutation: with probability mutation_rate, adjust allocation
-        either by random step delta or random uniform resampling.
-        """
+    def _mutate(self, chromosome: List[Tuple[int, str]]) -> List[Tuple[int, str]]:
+        """Gene mutation: randomly reassigns resource or time slot with mutation probability."""
         mutated = list(chromosome)
         for i in range(self.num_activities):
             if random.random() < self.mutation_rate:
-                demand = self.demands[i]
-                if demand <= 0:
-                    mutated[i] = 0
-                    continue
+                act = self.activities[i]
+                req_type = act.get("required_resource_type", "")
+                compatible_ids = self.compatible_resources_by_type.get(req_type, [])
 
-                mode = random.choice(["delta", "resample"])
-                if mode == "delta":
-                    step = random.choice([-2, -1, 1, 2, 5, -5])
-                    mutated[i] = max(0, min(demand, mutated[i] + step))
+                # Mutate resource
+                if compatible_ids and random.random() < 0.70:
+                    new_rid = random.choice(compatible_ids)
+                elif self.resources:
+                    new_rid = random.choice(self.resources)["id"]
                 else:
-                    mutated[i] = random.randint(0, demand)
+                    new_rid = mutated[i][0]
 
+                # Mutate time slot
+                new_slot = random.choice(self.time_slots)
+                mutated[i] = (new_rid, new_slot)
         return mutated
 
-    # -------------------------------------------------------------------------
-    # Optimization Execution Loop
-    # -------------------------------------------------------------------------
-
-    def optimize(self) -> Dict[str, Any]:
+    def run(self) -> Dict[str, Any]:
         """
-        Executes the Genetic Algorithm loop:
-        1. Initialize population.
-        2. Evaluate fitness.
-        3. For each generation:
-           a. Preserve elites.
-           b. Select parents via tournament selection.
-           c. Apply crossover.
-           d. Apply mutation.
-           e. Repair offspring for constraint satisfaction.
-           f. Track statistics (best, average, min fitness).
-        4. Return comprehensive results and metrics.
+        Executes the Genetic Algorithm across all generations.
+        Returns the optimal chromosome, convergence telemetry, and full allocation manifest.
         """
         start_time = time.time()
 
-        if self.num_activities == 0:
-            return self._build_empty_result(start_time)
+        if self.num_activities == 0 or self.num_resources == 0:
+            return {
+                "best_fitness": 0.0,
+                "allocations": [],
+                "total_activities": 0,
+                "allocated_activities": 0,
+                "unallocated_activities": 0,
+                "resource_utilization_pct": 0.0,
+                "total_cost": 0.0,
+                "hard_violations": 0,
+                "soft_violations": 0,
+                "execution_time_sec": round(time.time() - start_time, 3),
+                "convergence_history": [],
+                "status": "No Active Activities",
+                "notes": "No active activities or resources available for scheduling."
+            }
 
-        population = self.create_initial_population()
-        convergence_history: List[Dict[str, Any]] = []
+        # Step 1: Initialize Population
+        population = self._initialize_population()
+        for i in range(len(population)):
+            population[i] = self._repair_chromosome(population[i])
 
-        best_solution: Optional[List[int]] = None
-        best_fitness = -1.0
+        best_chromosome = None
+        best_fitness = -float("inf")
+        best_stats = {}
+        convergence_history = []
 
-        for gen in range(self.generations):
-            # Calculate fitness for all individuals
-            fitnesses = [self.calculate_fitness(ind) for ind in population]
+        # Step 2: Generation Loop
+        for gen in range(1, self.generations + 1):
+            # Evaluate all individuals
+            eval_results = [self.evaluate_chromosome(ind) for ind in population]
+            fitnesses = [res[0] for res in eval_results]
 
-            current_best_idx = int(np.argmax(fitnesses))
-            current_best_fit = float(fitnesses[current_best_idx])
-            avg_fit = float(np.mean(fitnesses))
-            min_fit = float(np.min(fitnesses))
+            # Track generation best
+            current_max_idx = int(np.argmax(fitnesses))
+            current_best_fit = fitnesses[current_max_idx]
 
             if current_best_fit > best_fitness:
                 best_fitness = current_best_fit
-                best_solution = list(population[current_best_idx])
+                best_chromosome = list(population[current_max_idx])
+                best_stats = eval_results[current_max_idx][1]
+
+            mean_fit = float(np.mean(fitnesses))
+            min_fit = float(np.min(fitnesses))
 
             convergence_history.append({
-                "generation": gen + 1,
-                "best_fitness": round(current_best_fit, 3),
-                "avg_fitness": round(avg_fit, 3),
-                "min_fitness": round(min_fit, 3)
+                "generation": gen,
+                "best_fitness": round(best_fitness, 2),
+                "avg_fitness": round(mean_fit, 2),
+                "min_fitness": round(min_fit, 2),
+                "hard_violations": best_stats.get("hard_violations", 0)
             })
 
-            # Create next generation
-            next_generation: List[List[int]] = []
+            # Check early termination if perfect optimal fitness reached
+            if best_stats.get("hard_violations", 0) == 0 and best_stats.get("soft_violations", 0) == 0:
+                # Continue small elitism step or finish
+                pass
 
-            # Elitism: retain top k solutions directly
+            # Step 3: Elitism - retain top k individuals
             sorted_indices = np.argsort(fitnesses)[::-1]
-            for i in range(self.elitism_count):
-                next_generation.append(list(population[sorted_indices[i]]))
+            next_population = [list(population[idx]) for idx in sorted_indices[:self.elitism_count]]
 
-            # Breed remaining individuals
-            while len(next_generation) < self.population_size:
-                p1 = self.tournament_selection(population, fitnesses)
-                p2 = self.tournament_selection(population, fitnesses)
+            # Step 4: Reproduction (Selection, Crossover, Mutation, Repair)
+            while len(next_population) < self.population_size:
+                parent1 = self._tournament_selection(population, fitnesses)
+                parent2 = self._tournament_selection(population, fitnesses)
+                child1, child2 = self._crossover(parent1, parent2)
 
-                c1, c2 = self.crossover(p1, p2)
-                c1 = self.repair_chromosome(self.mutate(c1))
-                c2 = self.repair_chromosome(self.mutate(c2))
+                child1 = self._repair_chromosome(self._mutate(child1))
+                next_population.append(child1)
 
-                next_generation.append(c1)
-                if len(next_generation) < self.population_size:
-                    next_generation.append(c2)
+                if len(next_population) < self.population_size:
+                    child2 = self._repair_chromosome(self._mutate(child2))
+                    next_population.append(child2)
 
-            population = next_generation
+            population = next_population
 
-        # Final evaluation on best solution found
-        best_solution = self.repair_chromosome(best_solution or [0] * self.num_activities)
-        final_best_fitness = self.calculate_fitness(best_solution)
+        # Final repair pass on best solution to guarantee maximum feasibility
+        if best_chromosome:
+            repaired_best = self._repair_chromosome(best_chromosome)
+            repaired_fit, repaired_stats = self.evaluate_chromosome(repaired_best)
+            if repaired_fit >= best_fitness:
+                best_chromosome = repaired_best
+                best_fitness = repaired_fit
+                best_stats = repaired_stats
 
-        execution_time = time.time() - start_time
-        return self._format_results(best_solution, final_best_fitness, convergence_history, execution_time)
+        # Step 5: Format Final Allocation Manifest
+        allocations_manifest = []
+        for i, (rid, slot) in enumerate(best_chromosome):
+            act = self.activities[i]
+            res = self.resource_by_id.get(rid)
 
-    # -------------------------------------------------------------------------
-    # Results Formatting & Aggregation
-    # -------------------------------------------------------------------------
+            act_id = act.get("id", i + 1)
+            act_name = act.get("name", f"Activity #{i+1}")
+            dept = act.get("department", "General")
+            students = act.get("num_students", 0)
+            priority = act.get("priority", 1)
+            duration = act.get("duration_hours", 1.0)
 
-    def _format_results(
-        self,
-        chromosome: List[int],
-        best_fitness: float,
-        convergence_history: List[Dict[str, Any]],
-        execution_time: float
-    ) -> Dict[str, Any]:
-        """Packages detailed metrics, table items, and KPI summaries."""
-        allocations: List[Dict[str, Any]] = []
-        total_demand = sum(self.demands)
-        total_allocated = sum(chromosome)
-        total_cost = 0.0
+            # Check individual activity violations
+            act_violations = []
+            status = "Allocated"
 
-        # Per-resource utilization tracking
-        resource_summary: Dict[str, Dict[str, Any]] = {}
-        for res_name, cap in self.resource_capacities.items():
-            resource_summary[res_name] = {
-                "capacity": cap,
-                "allocated": 0,
-                "demand": 0,
-                "utilization_pct": 0.0
-            }
+            if not res:
+                status = "Unallocated"
+                act_violations.append("No resource assigned")
+                cost = 0.0
+                rname, rtype, rcap = "None", "None", 0
+            else:
+                rname = res.get("name", "")
+                rtype = res.get("resource_type", "")
+                rcap = res.get("capacity", 0)
+                unit_cost = res.get("operating_cost", 0.0)
+                cost = duration * unit_cost
 
-        for i in range(self.num_activities):
-            alloc = chromosome[i]
-            dem = self.demands[i]
-            unmet = dem - alloc
-            sat_pct = round((alloc / dem * 100.0) if dem > 0 else 0.0, 1)
-            cost = alloc * self.costs[i]
-            total_cost += cost
+                if rtype != act.get("required_resource_type"):
+                    status = "Conflict"
+                    act_violations.append(f"Type mismatch (requires {act.get('required_resource_type')})")
+                if rcap < students:
+                    status = "Conflict"
+                    act_violations.append(f"Capacity deficit (-{students - rcap})")
+                if res.get("availability") != "Available":
+                    status = "Conflict"
+                    act_violations.append(f"Resource {res.get('availability')}")
 
-            res_type = self.resource_types[i]
-            if res_type in resource_summary:
-                resource_summary[res_type]["allocated"] += alloc
-                resource_summary[res_type]["demand"] += dem
+            # Extract day and time slot components
+            day = slot.split()[0] if " " in slot else "Monday"
+            time_part = " ".join(slot.split()[1:]) if " " in slot else slot
 
-            allocations.append({
-                "activity_id": self.activities[i].get("id"),
-                "name": self.names[i],
-                "resource_type": res_type,
-                "priority": self.priorities[i],
-                "demand": dem,
-                "allocated": alloc,
-                "unmet": unmet,
-                "satisfaction_pct": sat_pct,
-                "cost_per_unit": self.costs[i],
-                "total_cost": round(cost, 2),
-                "status": "Full" if unmet == 0 else ("Partial" if alloc > 0 else "Unmet")
+            allocations_manifest.append({
+                "activity_id": act_id,
+                "activity_name": act_name,
+                "department": dept,
+                "num_students": students,
+                "priority": priority,
+                "resource_id": rid if res else None,
+                "resource_name": rname,
+                "resource_type": rtype,
+                "resource_capacity": rcap,
+                "day": day,
+                "time_slot": time_part,
+                "cost": round(cost, 2),
+                "status": status,
+                "violations": "; ".join(act_violations) if act_violations else "None"
             })
 
-        for res_name, data in resource_summary.items():
-            cap = data["capacity"]
-            data["utilization_pct"] = round((data["allocated"] / cap * 100.0) if cap > 0 else 0.0, 1)
+        execution_time = round(time.time() - start_time, 3)
+        hard_v = best_stats.get("hard_violations", 0)
+        soft_v = best_stats.get("soft_violations", 0)
 
-        total_cap_sum = sum(self.resource_capacities.values())
-        overall_res_util_pct = round((total_allocated / total_cap_sum * 100.0) if total_cap_sum > 0 else 0.0, 1)
-        demand_sat_pct = round((total_allocated / total_demand * 100.0) if total_demand > 0 else 0.0, 1)
-        budget_util_pct = round((total_cost / self.budget_limit * 100.0) if self.budget_limit > 0 else 0.0, 1)
+        if hard_v == 0:
+            status_text = "Optimal Solution Found" if soft_v == 0 else "Feasible Allocation (No Hard Conflicts)"
+        else:
+            status_text = f"Unresolved Conflicts ({hard_v} Hard Violations)"
+
+        notes = (
+            f"Optimized {self.num_activities} activities across {self.num_resources} resources in "
+            f"{execution_time}s across {self.generations} generations (Population: {self.population_size})."
+        )
 
         return {
-            "success": True,
-            "best_chromosome": chromosome,
-            "best_fitness": round(best_fitness, 3),
-            "total_demand": total_demand,
-            "total_allocated": total_allocated,
-            "total_unmet": total_demand - total_allocated,
-            "demand_satisfaction_pct": demand_sat_pct,
-            "budget_limit": self.budget_limit,
-            "budget_spent": round(total_cost, 2),
-            "remaining_budget": round(max(0.0, self.budget_limit - total_cost), 2),
-            "budget_utilization_pct": budget_util_pct,
-            "overall_resource_utilization_pct": overall_res_util_pct,
-            "resource_summary": resource_summary,
-            "allocations": allocations,
+            "best_fitness": round(best_fitness, 2),
+            "allocations": allocations_manifest,
+            "total_activities": self.num_activities,
+            "allocated_activities": best_stats.get("allocated_count", self.num_activities - hard_v),
+            "unallocated_activities": hard_v,
+            "resource_utilization_pct": best_stats.get("utilization_pct", 0.0),
+            "total_cost": best_stats.get("total_cost", 0.0),
+            "hard_violations": hard_v,
+            "soft_violations": soft_v,
+            "execution_time_sec": execution_time,
             "convergence_history": convergence_history,
-            "execution_time_sec": round(execution_time, 4),
-            "algorithm_parameters": {
-                "population_size": self.population_size,
-                "generations": self.generations,
-                "crossover_rate": self.crossover_rate,
-                "mutation_rate": self.mutation_rate,
-                "tournament_size": self.tournament_size,
-                "elitism_count": self.elitism_count,
-                "random_seed": self.random_seed
-            }
-        }
-
-    def _build_empty_result(self, start_time: float) -> Dict[str, Any]:
-        """Fallback result when no active activities exist."""
-        return {
-            "success": False,
-            "message": "No active activities found for optimization.",
-            "best_chromosome": [],
-            "best_fitness": 0.0,
-            "total_demand": 0,
-            "total_allocated": 0,
-            "total_unmet": 0,
-            "demand_satisfaction_pct": 0.0,
-            "budget_limit": self.budget_limit,
-            "budget_spent": 0.0,
-            "remaining_budget": self.budget_limit,
-            "budget_utilization_pct": 0.0,
-            "overall_resource_utilization_pct": 0.0,
-            "resource_summary": {},
-            "allocations": [],
-            "convergence_history": [],
-            "execution_time_sec": round(time.time() - start_time, 4),
-            "algorithm_parameters": {}
+            "status": status_text,
+            "notes": notes,
+            "violation_details": best_stats.get("violation_details", [])
         }

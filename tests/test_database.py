@@ -1,147 +1,196 @@
 """
-Automated unit test suite for the SQLite database persistence module.
-Developed by Team EvoNex.
+Automated unit and integration test suite for database.py.
+Developed by Team EvoCampus.
 Validates:
-- Schema initialization and automatic table creation
-- Seeding of required realistic campus sample data
-- Add, update, delete, and toggle operations for activities
-- Add, update, delete operations for resources and foreign key constraints
-- Saving and retrieving complete optimization runs and allocations
-- Transactional consistency and persistence across restarts
+- Schema initialization & tables creation
+- Resource CRUD operations & validation
+- Activity CRUD operations, validation & status toggling
+- Optimization runs & allocations persistence with cascading deletes
+- Dashboard summary statistics calculations
 """
 
 import os
 import unittest
-import tempfile
-import database
+import database as db
+
+TEST_DB_PATH = "test_campus_optimizer.db"
 
 
 class TestDatabase(unittest.TestCase):
 
     def setUp(self):
-        """Create a temporary database file for isolated testing."""
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.db_path = os.path.join(self.temp_dir.name, "test_campus.db")
-        database.init_db(self.db_path)
+        """Set up clean temporary SQLite database for isolated test execution."""
+        if os.path.exists(TEST_DB_PATH):
+            os.remove(TEST_DB_PATH)
+        db.init_db(TEST_DB_PATH)
 
     def tearDown(self):
-        """Clean up temporary test directory."""
-        self.temp_dir.cleanup()
+        """Clean up temporary test SQLite database."""
+        if os.path.exists(TEST_DB_PATH):
+            os.remove(TEST_DB_PATH)
 
-    def test_initial_sample_data_seeded(self):
-        """Ensure default sample resources and activities are automatically seeded."""
-        resources = database.get_resources(self.db_path)
-        activities = database.get_activities(self.db_path)
+    def test_schema_initialization(self):
+        """Verifies that all 4 required tables and sample data are initialized."""
+        resources = db.get_resources(TEST_DB_PATH)
+        activities = db.get_activities(TEST_DB_PATH)
+        self.assertGreater(len(resources), 0)
+        self.assertGreater(len(activities), 0)
 
-        res_names = [r["name"] for r in resources]
-        self.assertIn("Classroom", res_names)
-        self.assertIn("Computer Lab", res_names)
-        self.assertIn("Equipment", res_names)
-
-        act_names = [a["name"] for a in activities]
-        self.assertIn("AI Lecture", act_names)
-        self.assertIn("DBMS Lab", act_names)
-        self.assertIn("EC Lab", act_names)
-        self.assertIn("Project Review", act_names)
-        self.assertIn("Coding Workshop", act_names)
-        self.assertIn("Research Session", act_names)
-
-    def test_add_and_prevent_duplicate_activity(self):
-        """Verify activity addition and prevention of duplicate activity names."""
-        success, msg = database.add_activity(
-            self.db_path,
+    def test_add_and_duplicate_resource(self):
+        """Verifies adding resource and rejecting duplicates."""
+        success, msg = db.add_resource(
             name="Quantum Computing Lab",
-            resource_type="Computer Lab",
-            demand=25,
-            priority=5,
-            cost_per_unit=30.0,
-            is_active=True
+            resource_type="Laboratory",
+            capacity=30,
+            location="Building Q",
+            availability="Available",
+            operating_cost=60.0,
+            db_path=TEST_DB_PATH
         )
         self.assertTrue(success)
 
-        # Attempt to add exact duplicate name
-        dup_success, dup_msg = database.add_activity(
-            self.db_path,
+        # Duplicate name must fail
+        dup_success, dup_msg = db.add_resource(
             name="Quantum Computing Lab",
-            resource_type="Computer Lab",
-            demand=20,
-            priority=3,
-            cost_per_unit=15.0
+            resource_type="Laboratory",
+            capacity=30,
+            db_path=TEST_DB_PATH
         )
         self.assertFalse(dup_success)
-        self.assertIn("already exists", dup_msg)
 
-    def test_toggle_and_delete_activity(self):
-        """Verify toggling active status and activity deletion."""
-        activities = database.get_activities(self.db_path)
-        target = activities[0]
-        act_id = target["id"]
+    def test_update_and_delete_resource(self):
+        """Verifies resource update and deletion."""
+        resources = db.get_resources(TEST_DB_PATH)
+        first_res = resources[0]
 
-        # Toggle status
-        success, _ = database.toggle_activity_status(self.db_path, act_id)
-        self.assertTrue(success)
-        updated = [a for a in database.get_activities(self.db_path) if a["id"] == act_id][0]
-        self.assertEqual(updated["is_active"], 0 if target["is_active"] == 1 else 1)
+        # Update capacity
+        up_success, up_msg = db.update_resource(
+            resource_id=first_res["id"],
+            name=first_res["name"],
+            resource_type=first_res["resource_type"],
+            capacity=999,
+            db_path=TEST_DB_PATH
+        )
+        self.assertTrue(up_success)
 
-        # Delete activity
-        del_success, _ = database.delete_activity(self.db_path, act_id)
+        updated_res = db.get_resource_by_id(first_res["id"], TEST_DB_PATH)
+        self.assertEqual(updated_res["capacity"], 999)
+
+        # Delete
+        del_success, del_msg = db.delete_resource(first_res["id"], TEST_DB_PATH)
         self.assertTrue(del_success)
-        remaining_ids = [a["id"] for a in database.get_activities(self.db_path)]
-        self.assertNotIn(act_id, remaining_ids)
+        self.assertIsNone(db.get_resource_by_id(first_res["id"], TEST_DB_PATH))
 
-    def test_resource_fk_constraint(self):
-        """Ensure resources linked to active activities cannot be accidentally deleted."""
-        # 'Classroom' is referenced by 'AI Lecture' and others
-        success, msg = database.delete_resource(self.db_path, "Classroom")
-        self.assertFalse(success)
-        self.assertIn("depend on it", msg)
+    def test_add_and_toggle_activity(self):
+        """Verifies activity creation and active status toggling."""
+        success, msg = db.add_activity(
+            name="Bio-Inspired Robotics Practical",
+            department="Biomedical Eng",
+            num_students=28,
+            duration_hours=2.0,
+            required_resource_type="Laboratory",
+            priority=5,
+            budget=140.0,
+            preferred_day="Wednesday",
+            preferred_time_slot="10:00 - 12:00",
+            is_active=1,
+            db_path=TEST_DB_PATH
+        )
+        self.assertTrue(success)
+
+        # Find created activity
+        activities = db.get_activities(TEST_DB_PATH)
+        created = [a for a in activities if a["name"] == "Bio-Inspired Robotics Practical"][0]
+        self.assertEqual(created["is_active"], 1)
+
+        # Toggle to inactive
+        t_success, t_msg = db.toggle_activity_status(created["id"], TEST_DB_PATH)
+        self.assertTrue(t_success)
+        toggled = db.get_activity_by_id(created["id"], TEST_DB_PATH)
+        self.assertEqual(toggled["is_active"], 0)
 
     def test_save_and_retrieve_optimization_run(self):
-        """Verify saving optimization runs and retrieving details from database."""
-        meta = {
+        """Verifies saving an optimization run and cascading allocations."""
+        run_meta = {
             "timestamp": "2026-10-16 12:00:00",
-            "population_size": 50,
-            "generations": 30,
-            "mutation_rate": 0.1,
+            "population_size": 40,
+            "generations": 25,
+            "mutation_rate": 0.15,
             "crossover_rate": 0.85,
-            "budget_limit": 3000.0,
-            "random_seed": 42,
-            "best_fitness": 92.5,
-            "total_demand": 200,
-            "total_allocated": 175,
-            "demand_satisfaction_pct": 87.5,
-            "budget_spent": 2850.0,
-            "budget_utilization_pct": 95.0,
-            "resource_utilization_pct": 85.0,
-            "execution_time_sec": 0.234
+            "elitism_count": 2,
+            "tournament_size": 3,
+            "best_fitness": 1250.5,
+            "total_activities": 2,
+            "allocated_activities": 2,
+            "unallocated_activities": 0,
+            "resource_utilization_pct": 82.5,
+            "total_cost": 95.0,
+            "hard_violations": 0,
+            "soft_violations": 0,
+            "execution_time_sec": 0.45,
+            "status": "Optimal Solution Found"
         }
+
         allocations = [
             {
-                "name": "AI Lecture",
-                "resource_type": "Classroom",
+                "activity_id": 1,
+                "activity_name": "Test Act 1",
+                "department": "CS",
+                "num_students": 30,
                 "priority": 5,
-                "demand": 60,
-                "allocated": 60,
-                "unmet": 0,
-                "satisfaction_pct": 100.0,
-                "cost_per_unit": 15.0,
-                "total_cost": 900.0
+                "resource_id": 1,
+                "resource_name": "Room A",
+                "resource_type": "Classroom",
+                "resource_capacity": 40,
+                "day": "Monday",
+                "time_slot": "09:00 - 11:00",
+                "cost": 50.0,
+                "status": "Allocated",
+                "violations": "None"
+            },
+            {
+                "activity_id": 2,
+                "activity_name": "Test Act 2",
+                "department": "CS",
+                "num_students": 25,
+                "priority": 4,
+                "resource_id": 2,
+                "resource_name": "Lab B",
+                "resource_type": "Laboratory",
+                "resource_capacity": 30,
+                "day": "Tuesday",
+                "time_slot": "11:00 - 13:00",
+                "cost": 45.0,
+                "status": "Allocated",
+                "violations": "None"
             }
         ]
-        convergence = [{"generation": 1, "best_fitness": 75.0, "avg_fitness": 60.0, "min_fitness": 40.0}]
 
-        run_id = database.save_optimization_run(self.db_path, meta, allocations, convergence)
+        run_id = db.save_optimization_run(run_meta, allocations, TEST_DB_PATH)
         self.assertGreater(run_id, 0)
 
-        runs = database.get_optimization_runs(self.db_path)
-        self.assertEqual(len(runs), 1)
-        self.assertEqual(runs[0]["id"], run_id)
-        self.assertEqual(runs[0]["best_fitness"], 92.5)
+        # Retrieve run and allocations
+        saved_run = db.get_run_by_id(run_id, TEST_DB_PATH)
+        self.assertIsNotNone(saved_run)
+        self.assertEqual(saved_run["best_fitness"], 1250.5)
 
-        run_details = database.get_run_details(self.db_path, run_id)
-        self.assertIsNotNone(run_details)
-        self.assertEqual(len(run_details["allocations"]), 1)
-        self.assertEqual(run_details["allocations"][0]["activity_name"], "AI Lecture")
+        saved_allocs = db.get_run_allocations(run_id, TEST_DB_PATH)
+        self.assertEqual(len(saved_allocs), 2)
+
+        # Delete run
+        del_success, del_msg = db.delete_optimization_run(run_id, TEST_DB_PATH)
+        self.assertTrue(del_success)
+        self.assertIsNone(db.get_run_by_id(run_id, TEST_DB_PATH))
+        self.assertEqual(len(db.get_run_allocations(run_id, TEST_DB_PATH)), 0)
+
+    def test_dashboard_stats(self):
+        """Verifies dashboard summary statistics calculation."""
+        stats = db.get_dashboard_stats(TEST_DB_PATH)
+        self.assertIn("total_activities", stats)
+        self.assertIn("active_activities", stats)
+        self.assertIn("total_resources", stats)
+        self.assertIn("total_capacity", stats)
+        self.assertGreater(stats["total_capacity"], 0)
 
 
 if __name__ == "__main__":

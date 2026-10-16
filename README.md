@@ -1,41 +1,55 @@
 # 🧬 Smart Campus Resource Optimizer
 
 > **“Evolving Intelligence, Optimizing Tomorrow.”**  
-> **Team EvoNex** &bull; College Evolutionary Computing (EC) Project
+> **Team EvoCampus** &bull; Smart Campus Resource Allocation & Optimization
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)
-![Framework](https://img.shields.io/badge/Streamlit-1.30%2B-FF4B4B.svg)
-![Optimization](https://img.shields.io/badge/Algorithm-Genetic%20Algorithm%20(From%20Scratch)-success.svg)
+![Framework](https://img.shields.io/badge/Framework-Flask%203.0%2B-000000.svg)
+![Optimization](https://img.shields.io/badge/Algorithm-Genetic%20Algorithm%20(Pure%20Python)-success.svg)
 ![Database](https://img.shields.io/badge/Database-SQLite3-003B57.svg)
-![Tests](https://img.shields.io/badge/Tests-12%20Passed%20(pytest)-brightgreen.svg)
+![Charts](https://img.shields.io/badge/Visuals-Chart.js-FF6384.svg)
+![Tests](https://img.shields.io/badge/Tests-13%20Passed%20(pytest)-brightgreen.svg)
 
 ---
 
 ## 📌 Executive Summary
 
-The **Smart Campus Resource Optimizer** is a production-grade web application engineered to solve the complex, multi-constrained resource scheduling challenges faced by academic institutions. Modern universities contend with limited lecture halls, computer terminals, specialized lab apparatus, and financial operating budgets while managing competing, high-demand academic sessions. 
+The **Smart Campus Resource Optimizer** is a production-grade web application engineered to solve the multi-constrained resource scheduling challenges faced by higher education academic institutions. Modern universities contend with limited lecture halls, specialized laboratories, seminar auditoriums, faculty time slots, and financial operating budgets while managing competing, high-demand academic sessions.
 
-Using an Evolutionary Computing approach, this application implements a **custom Genetic Algorithm (GA) from scratch** in pure Python/NumPy—featuring chromosome encoding, tournament selection, single-point crossover, gene mutation, elitism, and strict feasibility repair mechanisms to guarantee optimal, constraint-compliant resource distribution.
+Built with a modern full-stack architecture using **Python, Flask, HTML5, Vanilla CSS3, JavaScript, Chart.js, and SQLite**, this system implements a genuine **Genetic Algorithm (GA)** from first principles. It optimizes facility assignments and scheduling time slots, prevents resource collisions, respects seating capacity bounds, penalizes category mismatches, and rewards high-priority academic events.
 
 ---
 
 ## 📂 Project Architecture & Directory Structure
 
 ```text
-smart_campus_resource_optimizer/
-├── .streamlit/
-│   └── config.toml               # Modern dark navy visual theme & port settings
-├── database.py                   # SQLite persistence, transactional schema, & CRUD operations
-├── optimizer.py                  # Pure Python Genetic Algorithm with repair & fitness operators
-├── app.py                        # Streamlit web application & Plotly telemetry dashboard
-├── requirements.txt              # Production and testing Python package dependencies
-├── .gitignore                    # Version control ignore rules (caches, environments, temp files)
-├── README.md                     # Deployment, setup, and developer operations guide
-├── ACADEMIC_DOCUMENTATION.md     # Full academic project report with mathematical proofs & flowcharts
+smart-campus-resource-optimizer/
+├── app.py                     # Main Flask web application, REST endpoints & routing
+├── database.py                # SQLite persistence, schema initialization, & CRUD operations
+├── optimizer.py               # Pure Python Genetic Algorithm with repair & fitness operators
+├── requirements.txt           # Production & testing package dependencies
+├── README.md                  # Complete deployment, usage, and project operations guide
+├── ACADEMIC_DOCUMENTATION.md  # Academic project report with mathematical proofs & flowcharts
+├── campus_optimizer.db        # SQLite ACID relational database file (auto-generated)
+├── static/
+│   ├── css/
+│   │   └── style.css          # Custom Vanilla CSS design system (dark navy glassmorphism)
+│   └── js/
+│       └── main.js            # Client-side controllers, modals, table filters, & AJAX GA runner
+├── templates/
+│   ├── base.html              # Master layout template with sidebar navigation & alert system
+│   ├── index.html             # Executive Dashboard with KPI cards & Chart.js graphs
+│   ├── activities.html        # Academic Activity Management (Add, Edit, Filter, Delete, Toggle)
+│   ├── resources.html         # Campus Resource Management (Classrooms, Labs, Halls, Equipment)
+│   ├── optimize.html          # Genetic Algorithm Control Center with hyperparameter tuning
+│   ├── results.html           # Optimization Telemetry, 4 Chart.js charts & Allocation Manifest
+│   ├── history.html           # Historical Optimization Runs Ledger & Comparative Audit Trail
+│   ├── reports.html           # Formal Printable Academic Project Report (@media print)
+│   └── about.html             # Project details, mathematical formulation & team info
 └── tests/
-    ├── __init__.py               # Test package initialization
-    ├── test_optimizer.py         # Automated unit & integration tests for GA operators
-    └── test_database.py          # Automated unit tests for database transactions & integrity
+    ├── __init__.py            # Test package initialization
+    ├── test_optimizer.py      # Automated unit tests for GA chromosome, fitness & operators
+    └── test_database.py       # Automated unit tests for database transactions & integrity
 ```
 
 ---
@@ -43,137 +57,151 @@ smart_campus_resource_optimizer/
 ## 🚀 Key Modules & System Features
 
 ### 1. 📊 Executive Dashboard
-- **Real-time KPI Metrics**: Available campus capacity, total active academic activities, gross demand units, demand satisfaction rate, resource utilization percentage, and latest run fitness score.
-- **Resource Pressure Visualizer**: Interactive Plotly comparative charts contrasting physical capacities against active demands.
-- **Priority Tier Breakdown**: Distribution of critical, high, medium, and low priority requests.
-- **Recent Runs Ledger**: Quick-glance audit trail of recent optimization executions.
 
-### 2. 📚 Activity Management
-- Add, view, edit, toggle, and delete academic sessions (e.g. lectures, practical labs, workshops).
-- Attributes: Activity Name, Required Resource Type, Demand Quantity ($D_i > 0$), Priority Rating (1: Low to 5: Critical), Unit Cost ($/unit), and Active Status.
-- Real-time constraint validation and duplicate name prevention.
+- **Real-time KPI Metrics**: Active academic sessions, available classrooms & laboratories, gross seating capacity, and total completed optimization runs.
+- **Resource Distribution Analytics**: Interactive Chart.js doughnut charts categorizing physical capacities by facility type.
+- **Academic Priority Breakdown**: Visual distribution of critical (P5), high (P4), medium (P3), medium-low (P2), and low (P1) priority sessions.
+- **Recent Runs Ledger**: Quick-glance audit trail of recent GA executions with one-click result viewing.
 
-### 3. 🏛️ Resource Management
-- Configure campus facilities: Classrooms (Seats), Computer Labs (Workstations), and Specialized Equipment (Sets).
-- Adjust facility capacities dynamically.
-- Relational integrity enforcement: Prevents deletion of resources currently linked to academic activities.
+### 2. 📚 Academic Activity Management
 
-### 4. 🧬 Genetic Algorithm Optimizer
-- **Chromosome Representation**: Integer vector where each gene corresponds to the allocated units for an academic activity ($0 \le x_i \le D_i$).
-- **Tournament Selection**: Configurable tournament size ($k$) selecting superior parents.
-- **Single-Point Crossover**: Recombines gene tails with probability $P_c$.
-- **Gene-Level Mutation**: Small step adjustments or uniform resampling with probability $P_m$.
-- **Elitism**: Retains top $k$ candidates unchanged into subsequent generations to prevent regression.
-- **Strict Feasibility Repair**: Deterministically enforces capacity limits and monetary budget constraints by trimming allocations from lowest-priority/highest-cost activities first.
-- **Deterministic Reproducibility**: User-configurable random seed.
+- Add, view, edit, toggle active/inactive status, and delete academic sessions (lectures, practical labs, capstone defenses, workshops).
+- Attributes: Activity Name, Department, Student Cohort Size, Duration (hours), Required Resource Type, Priority Rating (1 to 5), Budget ($), Preferred Day, and Preferred Time Slot.
+- Live client-side search and dual dropdown filtering by Department and Priority tier.
+- Server-side and client-side constraint validation preventing duplicate names or invalid negative bounds.
+
+### 3. 🏛️ Campus Resource Management
+
+- Configure campus facilities: General Classrooms (seats), Computer & Hardware Laboratories, University Seminar Halls, and Specialized Equipment.
+- Attributes: Facility Name, Category, Seating Capacity, Campus Location, Operational Availability (Available, Maintenance, Reserved), and Hourly Operating Cost.
+- Real-time search and filtering by Category and Operational Availability.
+
+### 4. 🧬 Genuine Genetic Algorithm Optimizer
+
+- **Chromosome Representation**: Integer tuple vector $\mathbf{X} = [(R_1, T_1), (R_2, T_2), \dots, (R_N, T_N)]$ where each gene encodes the assigned facility ID and scheduled time slot.
+- **Tournament Selection**: Configurable tournament size ($k$) selecting superior parents while maintaining genetic diversity.
+- **Single-Point Crossover**: Recombines gene tails with probability $P_c \approx 0.85$.
+- **Gene-Level Mutation**: Perturbs facility IDs and time slots with probability $P_m \approx 0.15$ to escape local optima.
+- **Elitism**: Retains top $e=2$ fittest candidates unchanged across generations to guarantee non-decreasing convergence.
+- **Deterministic Feasibility Repair**: Deterministically enforces capacity limits and eliminates time collisions by dynamically re-routing conflicting sessions to vacant compatible facilities.
+- **Deterministic Reproducibility**: User-configurable random seed for identical result replication during academic defenses.
 
 ### 5. 📈 Results & Visual Analytics
-- **Fitness Convergence Trajectory**: Plotly interactive graph of Best, Population Mean, and Min fitness across generations.
-- **Demand vs. Allocation Comparison**: Grouped bar charts showing requested vs delivered quantities.
-- **Resource Utilization Analysis**: Stacked visual breakdown of physical campus occupancy vs unused capacity.
-- **Financial Spending & Sunbursts**: Budget utilization per activity and resource type.
-- **CSV Data Export**: One-click download of the complete allocation manifest and run summary metadata.
+
+- **Fitness Convergence Trajectory**: Chart.js interactive graph contrasting Best Solution Fitness vs. Population Mean across generations.
+- **Resource Utilization Breakdown**: Comparative bar chart contrasting enrolled student cohort sizes against room capacities.
+- **Allocation Status Doughnut**: Visual breakdown of Feasible Allocations, Hard Conflicts, and Unallocated sessions.
+- **Before-and-After Optimization Comparison**: Bar chart showing performance improvements over unoptimized random configurations.
+- **CSV Data Export**: One-click download of the complete RFC-4180 allocation manifest.
 
 ### 6. 📜 Optimization History & Audit Ledger
+
 - Permanent persistence of every optimization run in SQLite.
-- Complete audit parameters: population size, generations, mutation rate, best fitness, runtime, and seed.
+- Complete audit parameters: population size, generations, mutation rate, crossover rate, best fitness, runtime, and seed.
 - Historical run inspector: Reload and visualize previous allocations and convergence curves at any time.
+
+### 7. 📋 Academic Printable Reports
+
+- Standardized printable academic report with print stylesheet (`@media print`).
+- Executive summary, hyperparameter audit, full allocation manifest, constraint checklist, and team sign-off.
 
 ---
 
 ## 🛠️ Local Installation & Setup Instructions
 
 ### Prerequisites
+
 - Python 3.10, 3.11, 3.12, 3.13, or 3.14
-- Git (optional, for version control)
+- Web browser (Chrome, Edge, Firefox, or Safari)
 
 ### Step 1: Clone or Navigate to the Repository
+
 ```bash
 git clone https://github.com/your-username/smart-campus-resource-optimizer.git
 cd smart-campus-resource-optimizer
 ```
 
 ### Step 2: Create and Activate a Virtual Environment
+
 - **On Windows (PowerShell):**
+
   ```powershell
   python -m venv venv
   .\venv\Scripts\Activate.ps1
   ```
+
 - **On macOS / Linux:**
+
   ```bash
   python3 -m venv venv
   source venv/bin/activate
   ```
 
 ### Step 3: Install Required Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### Step 4: Run Automated Tests
+
 Verify algorithm correctness, constraint adherence, and database persistence:
+
 ```bash
 python -m pytest tests -v
 ```
-*(Alternative using Python standard library: `python -m unittest discover tests`)*
 
-### Step 5: Launch the Streamlit Web Application
+*(Expected result: 13 passed tests verifying GA operators, capacity violations, collision detection, and database transactions).*
+
+### Step 5: Launch the Application
+
 ```bash
-python -m streamlit run app.py
+python app.py
 ```
-Open your browser and navigate to: **`http://localhost:8501`**
+
+Open your browser and navigate to: **`http://127.0.0.1:5000`**
 
 ---
 
-## ☁️ Streamlit Community Cloud Deployment Guide
+## 📸 Screenshots to Capture for Your Project Report
 
-Deploy your application online for free in under 5 minutes:
+When preparing your submission report or slide deck, capture screenshots of:
 
-1. **Push Code to GitHub**:
-   ```bash
-   git init
-   git add .
-   git commit -m "feat: complete Smart Campus Resource Optimizer for Team EvoNex"
-   git branch -M main
-   git remote add origin https://github.com/<your-github-username>/smart-campus-resource-optimizer.git
-   git push -u origin main
-   ```
-
-2. **Access Streamlit Community Cloud**:
-   - Visit [share.streamlit.io](https://share.streamlit.io/) and log in with your GitHub account.
-
-3. **Deploy New App**:
-   - Click **"New app"**.
-   - Select your repository: `<your-github-username>/smart-campus-resource-optimizer`.
-   - Set Branch: `main`.
-   - Set Main file path: `app.py`.
-   - Click **"Deploy!"**.
-
-### ⚠️ Note on SQLite Persistence on Free Cloud Hosting
-> [!IMPORTANT]
-> Streamlit Community Cloud operates on ephemeral container instances. While SQLite works locally with permanent persistence, free cloud containers reset their local disk upon redeployment, server sleep, or container migration. 
-> 
-> The application is engineered to automatically self-seed realistic campus data (`campus_optimizer.db`) whenever a fresh container launches. For permanent enterprise persistence across cloud restarts, the database layer in `database.py` can be pointed to PostgreSQL, Supabase, or AWS RDS by swapping the connection string.
+1. **Dashboard Overview (`/dashboard`)**: Shows KPI cards, Resource Distribution Chart, and Priority Breakdown Bar Chart.
+2. **Activity Management (`/activities`)**: Displays the live search filter and the "Add New Activity" modal.
+3. **Resource Management (`/resources`)**: Highlights campus room capacities, locations, and operational availabilities.
+4. **GA Control Center (`/optimize`)**: Demonstrates hyperparameter sliders (population, generations, mutation rate) and the live execution progress bar.
+5. **Optimization Results (`/results/1`)**: Captures the Fitness Convergence Trajectory, Occupancy Bar Chart, and the Final Allocation Table.
+6. **Printable Academic Report (`/reports/1`)**: Shows the formal submission-ready report formatted with `@media print`.
 
 ---
 
 ## 🧪 Automated Test Suite Validation
 
 The automated test suite (`tests/test_optimizer.py` and `tests/test_database.py`) covers:
-1. **Fitness Proportionality**: Verifies higher priority activities yield higher fitness gains.
-2. **Demand Boundary Enforcement**: Ensures allocations never exceed requested demand ($0 \le x_i \le D_i$).
-3. **Resource Capacity Limits**: Validates that multi-activity allocations never exceed physical classroom, lab, or equipment capacities.
-4. **Budget Constraint Compliance**: Confirms total spending strictly respects maximum budgetary ceilings.
-5. **Genetic Operator Variation**: Verifies crossover recombinations and valid gene mutations.
-6. **Deterministic Seed Reproducibility**: Ensures identical random seeds yield identical solutions.
-7. **Database Transaction Integrity**: Tests relational foreign keys, cascade constraints, duplicate name prevention, and historical record retrieval.
+
+| Test Identifier | Target Module | Verification Scope | Result |
+| :--- | :--- | :--- | :--- |
+| **TC-01** | `optimizer.py` | Priority Fitness Scaling: High priority allocates receive strictly higher fitness | **PASS** |
+| **TC-02** | `optimizer.py` | Capacity Constraint: Detects and penalizes room capacity deficits | **PASS** |
+| **TC-03** | `optimizer.py` | Collision Detection: Enforces penalty on simultaneous double-booking | **PASS** |
+| **TC-04** | `optimizer.py` | Facility Type Match: Penalizes laboratory requests placed in lecture halls | **PASS** |
+| **TC-05** | `optimizer.py` | Feasibility Repair: Automatically re-routes collisions to unoccupied slots | **PASS** |
+| **TC-06** | `optimizer.py` | Deterministic Seed: Identical random seeds produce 100% identical solutions | **PASS** |
+| **TC-07** | `optimizer.py` | Empty Activity Handling: Gracefully handles empty session inputs | **PASS** |
+| **TC-08** | `database.py` | Schema Initialization: Creates all 4 relational tables and seeds campus data | **PASS** |
+| **TC-09** | `database.py` | Resource CRUD: Validates insertion, update, delete, and duplicate rejection | **PASS** |
+| **TC-10** | `database.py` | Activity CRUD: Validates creation, status toggle (Active/Inactive), and updates | **PASS** |
+| **TC-11** | `database.py` | Run Persistence: Verifies ACID transaction saving and query retrieval | **PASS** |
+| **TC-12** | `database.py` | Cascading Deletes: Deleting an optimization run safely deletes its allocations | **PASS** |
+| **TC-13** | `database.py` | Summary Statistics: Confirms calculations for dashboard metrics | **PASS** |
 
 ---
 
-## 👥 Team EvoNex & Project Information
+## 👥 Team EvoCampus & Project Information
 
 - **Project**: Smart Campus Resource Optimizer
-- **Team**: EvoNex
-- **Motto**: *“Evolving Intelligence, Optimizing Tomorrow.”*
-- **Course**: Evolutionary Computing (EC) / Metaheuristic Optimization
+- **Team**: EvoCampus
+- **Tagline**: *“Evolving Intelligence, Optimizing Tomorrow.”*
+- **Domain**: Bio-Inspired AI / Optimization
 - **License**: MIT Open Source License

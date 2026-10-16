@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Smart Campus Resource Optimizer{% endblock %} | Team EvoCampus</title>
+  <!-- Google Fonts: Outfit & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="app-sidebar">
+      <a href="{{ url_for('dashboard') }}" class="brand-section" style="text-decoration: none; display: flex;">
+        <div class="brand-logo">🧬</div>
+        <div>
+          <div class="brand-title">EvoCampus</div>
+          <div class="brand-subtitle">Campus Optimizer</div>
+        </div>
+      </a>
+
+      <ul class="nav-menu">
+        <li>
+          <a href="{{ url_for('dashboard') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">
+            <span class="nav-icon">📊</span>
+            <span>Dashboard</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('activities_page') }}" class="nav-link {% if active_page == 'activities' %}active{% endif %}">
+            <span class="nav-icon">📚</span>
+            <span>Activities</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('resources_page') }}" class="nav-link {% if active_page == 'resources' %}active{% endif %}">
+            <span class="nav-icon">🏛️</span>
+            <span>Resources</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('optimize_page') }}" class="nav-link {% if active_page == 'optimize' %}active{% endif %}">
+            <span class="nav-icon">🧬</span>
+            <span>Run GA Optimizer</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('results_page') }}" class="nav-link {% if active_page == 'results' %}active{% endif %}">
+            <span class="nav-icon">📈</span>
+            <span>Results & Telemetry</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('history_page') }}" class="nav-link {% if active_page == 'history' %}active{% endif %}">
+            <span class="nav-icon">📜</span>
+            <span>Run History</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('reports_page') }}" class="nav-link {% if active_page == 'reports' %}active{% endif %}">
+            <span class="nav-icon">📋</span>
+            <span>Academic Reports</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('about_page') }}" class="nav-link {% if active_page == 'about' %}active{% endif %}">
+            <span class="nav-icon">📖</span>
+            <span>About Project</span>
+          </a>
+        </li>
+      </ul>
+
+      <!-- Sidebar Footer Metrics & Quick Reset -->
+      <div class="sidebar-footer">
+        <div class="sidebar-metric">
+          <span>Active Activities:</span>
+          <strong>{{ global_stats.active_activities }} / {{ global_stats.total_activities }}</strong>
+        </div>
+        <div class="sidebar-metric">
+          <span>Total Resources:</span>
+          <strong>{{ global_stats.total_resources }} ({{ global_stats.total_capacity }} cap)</strong>
+        </div>
+        <div class="sidebar-metric">
+          <span>Optimization Runs:</span>
+          <strong>{{ global_stats.total_runs }} completed</strong>
+        </div>
+
+        <form action="{{ url_for('reset_sample_data_action') }}" method="POST" onsubmit="return confirmDelete('Reset database to default university sample dataset? Existing custom edits will be refreshed.');" style="margin-top: 6px;">
+          <button type="submit" class="btn btn-secondary btn-sm" style="width: 100%;">
+            🔄 Reset Sample Data
+          </button>
+        </form>
+      </div>
+    </aside>
+
+    <!-- Main Application Wrapper -->
+    <div class="main-wrapper">
+      <!-- Top Header Bar -->
+      <header class="top-navbar">
+        <div class="top-navbar-left">
+          <a href="{{ url_for('dashboard') }}" class="page-title-badge" style="text-decoration: none;">
+            🧬 {{ team_name }}
+          </a>
+          <span style="font-size: 0.85rem; color: var(--text-muted); font-style: italic;">
+            “{{ team_tagline }}”
+          </span>
+        </div>
+
+        <div class="top-navbar-right">
+          <span class="status-pill">
+            <span class="pulse-dot"></span>
+            GA Engine Ready
+          </span>
+          <span style="font-size: 0.8rem; color: var(--text-dim); font-family: var(--font-mono);">
+            {{ current_time }}
+          </span>
+        </div>
+      </header>
+
+      <!-- Main Content Container -->
+      <main class="content-container">
+        <!-- Flash Alert Messages -->
+        <div class="flash-container">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                  <span>{{ message }}</span>
+                  <button type="button" onclick="this.parentElement.style.display='none'" style="background:none; border:none; color:inherit; cursor:pointer; font-size:1.1rem; line-height:1;">&times;</button>
+                </div>
+              {% endfor %}
+            {% endif %}
+          {% endwith %}
+        </div>
+
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <!-- Main JavaScript Logic -->
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

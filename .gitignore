@@ -14,8 +14,9 @@ ENV/
 env.bak/
 venv.bak/
 
-# SQLite runtime databases (optional to ignore or track initial sample)
-# campus_optimizer.db
+# SQLite runtime databases
+campus_optimizer.db
+*.db
 
 # OS specific files
 .DS_Store
